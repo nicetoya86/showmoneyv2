@@ -1,0 +1,13 @@
+{
+  "sessionCount": 48,
+  "lastSession": {
+    "startedAt": "2026-04-11T13:13:40.767Z",
+    "platform": "claude",
+    "level": "Starter"
+  },
+  "feature": "showmoneyv2-fast-profit",
+  "phase": "archived",
+  "matchRate": 100,
+  "archivedAt": "2026-04-11",
+  "archivedTo": "docs/archive/2026-04/showmoneyv2-fast-profit/"
+}

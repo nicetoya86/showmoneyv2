@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2025-12-21T14:44:45.748636Z",
+  "eval_days": 80,
+  "top_turnover": 300,
+  "targets": {
+    "up_avg": 4.0,
+    "mat_avg": 2.5
+  },
+  "UP": {
+    "threshold": 0.95,
+    "avg_candidates_per_day": 11.9625,
+    "median_candidates_per_day": 12.0,
+    "p90_candidates_per_day": 16.0,
+    "nonzero_day_ratio": 1.0,
+    "days_evaluated": 80
+  },
+  "MAT": {
+    "threshold": 0.95,
+    "avg_candidates_per_day": 8.5125,
+    "median_candidates_per_day": 8.0,
+    "p90_candidates_per_day": 13.100000000000009,
+    "nonzero_day_ratio": 0.9875,
+    "days_evaluated": 80
+  }
+}

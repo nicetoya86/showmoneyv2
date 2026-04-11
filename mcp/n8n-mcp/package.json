@@ -1,0 +1,20 @@
+{
+  "name": "n8n-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server for n8n Cloud (Cursor integration)",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}
+
+
+

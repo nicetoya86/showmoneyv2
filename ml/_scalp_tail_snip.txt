@@ -1,0 +1,2 @@
+stopNow }; } catch(e){ return null; }
+  };\n  for (let i=0; i<selected.length; i++){\n    const res = await send(selected[i]);\n    if (res){\n      store.scalpingSent[selected[i].ticker] = now.getTime();\n      const today = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth()+1)

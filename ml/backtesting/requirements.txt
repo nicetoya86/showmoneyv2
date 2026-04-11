@@ -1,0 +1,10 @@
+# Backtesting and optimization requirements
+vectorbt==0.26.2
+backtesting==0.3.3
+yfinance==0.2.37
+pandas==2.2.0
+numpy==1.26.4
+matplotlib==3.8.2
+seaborn==0.13.1
+scikit-learn==1.4.0
+ta==0.11.0

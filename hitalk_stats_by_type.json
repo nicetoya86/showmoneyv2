@@ -1,0 +1,96 @@
+{
+  "rows": 5838,
+  "types": {
+    "단타": 2181,
+    "급등": 1454,
+    "재료": 861,
+    "스윙": 857,
+    "단기": 449,
+    "중기": 36
+  },
+  "by_type": [
+    {
+      "type": "단타",
+      "count": 2181,
+      "return_mean": 13.6968,
+      "return_median": 11.4,
+      "return_p75": 17.22,
+      "return_p90": 23.76,
+      "days_mean": 2.0582,
+      "days_median": 2.0,
+      "rec_price_median": 10500.0
+    },
+    {
+      "type": "급등",
+      "count": 1454,
+      "return_mean": 12.0267,
+      "return_median": 9.475,
+      "return_p75": 13.4625,
+      "return_p90": 21.725,
+      "days_mean": 1.4457,
+      "days_median": 1.0,
+      "rec_price_median": 7620.0
+    },
+    {
+      "type": "재료",
+      "count": 861,
+      "return_mean": 13.8204,
+      "return_median": 10.44,
+      "return_p75": 16.7,
+      "return_p90": 25.98,
+      "days_mean": 2.5877,
+      "days_median": 2.0,
+      "rec_price_median": 11200.0
+    },
+    {
+      "type": "스윙",
+      "count": 857,
+      "return_mean": 21.7242,
+      "return_median": 17.91,
+      "return_p75": 26.53,
+      "return_p90": 38.366,
+      "days_mean": 4.6511,
+      "days_median": 4.0,
+      "rec_price_median": 15300.0
+    },
+    {
+      "type": "단기",
+      "count": 449,
+      "return_mean": 11.4395,
+      "return_median": 8.96,
+      "return_p75": 14.31,
+      "return_p90": 20.696,
+      "days_mean": 2.3452,
+      "days_median": 2.0,
+      "rec_price_median": 7580.0
+    },
+    {
+      "type": "중기",
+      "count": 36,
+      "return_mean": 52.4514,
+      "return_median": 46.155,
+      "return_p75": 64.43,
+      "return_p90": 81.485,
+      "days_mean": 20.9167,
+      "days_median": 20.0,
+      "rec_price_median": 16050.0
+    }
+  ],
+  "overall_return": {
+    "min": 2.52,
+    "p25": 7.842499999999999,
+    "median": 11.33,
+    "p75": 17.7675,
+    "p90": 26.95,
+    "max": 190.27,
+    "mean": 14.542848578280232
+  },
+  "overall_days": {
+    "min": 1,
+    "p25": 1.0,
+    "median": 2.0,
+    "p75": 3.0,
+    "max": 62,
+    "mean": 2.502740664611168
+  }
+}

@@ -1,0 +1,313 @@
+{
+  "timestamp": "2026-03-28T15:25:11.041Z",
+  "reason": "compaction",
+  "status": {
+    "version": "2.0",
+    "lastUpdated": "2026-03-28T15:14:21.101Z",
+    "activeFeatures": [
+      "showmoneyv2",
+      "scripts"
+    ],
+    "primaryFeature": "showmoneyv2",
+    "features": {
+      "showmoneyv2": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-08T15:02:20.792Z",
+          "lastUpdated": "2026-03-28T15:14:21.100Z"
+        },
+        "lastFile": "D:/vibecording/showmoneyv2/swing_scanner_code.js",
+        "previousPhase": "check",
+        "autoAdvanced": true
+      },
+      "scripts": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-14T07:35:45.301Z",
+          "lastUpdated": "2026-03-14T07:35:45.301Z"
+        },
+        "lastFile": "D:/vibecording/showmoneyv2/scripts/patch_naver_string_parse.py"
+      }
+    },
+    "pipeline": {
+      "currentPhase": 1,
+      "level": "Dynamic",
+      "phaseHistory": []
+    },
+    "session": {
+      "startedAt": "2026-03-08T14:53:57.237Z",
+      "onboardingCompleted": false,
+      "lastActivity": "2026-03-28T15:14:21.101Z"
+    },
+    "history": [
+      {
+        "timestamp": "2026-03-08T15:02:20.792Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:03:33.214Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:09:54.695Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:12:20.377Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:21:28.591Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:24:53.993Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T21:27:10.828Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T21:30:22.085Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:18:36.647Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:18:44.530Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:18:51.833Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:22:48.273Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-14T07:34:59.418Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-14T07:35:45.301Z",
+        "feature": "scripts",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-14T07:36:13.397Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-15T13:54:35.273Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-15T14:14:50.152Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-15T14:14:55.854Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-16T13:49:49.057Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-18T13:49:35.509Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-18T13:50:43.437Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:02.872Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:24.268Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:38.498Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:45.593Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:52.197Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T14:00:36.396Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T14:00:40.314Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:45:02.213Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:46:44.402Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:52:51.276Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:53:06.552Z",
+        "feature": "showmoneyv2",
+        "phase": "act",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:25:37.661Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:26:34.707Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:26:45.281Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:26:52.214Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:29:41.856Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:38:37.057Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:13:41.154Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:13:50.813Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:13:56.762Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:14:10.077Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:14:21.100Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      }
+    ]
+  }
+}

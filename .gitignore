@@ -1,0 +1,48 @@
+# API Keys / Credentials - NEVER commit
+.mcp.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ML / Large data files
+*.parquet
+*.h5
+*.pkl
+*.joblib
+
+# Excel / Binary files
+*.xlsx
+*.xls
+
+# Backups
+backups/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-01-12T15:20:00.579053Z",
+  "trdDd": "20260113",
+  "minPrice": 1000,
+  "minTurnover": 1000000000,
+  "maxTickers": 1200,
+  "naverQuantPages": 20,
+  "naverMktcapPages": 20,
+  "sleepMs": 120,
+  "source": "CACHE_KRX_DIR",
+  "errors": [
+    "KRX error: 400 Client Error: Bad Request for url: https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+  ],
+  "krxCacheFile": "2238b465bed2a761aed776741b94000c252e1183.json",
+  "krxRows": 2895,
+  "tickersCount": 959
+}

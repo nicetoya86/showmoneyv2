@@ -1,0 +1,186 @@
+=== NODE: Enhanced Strategy Scan1 ===
+const run = async function () {
+  const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
+  const CHAT = '523002062';
+  const MAX_SEND = 3;
+  const TARGET_RATE = 0.05; // +5%
+  const STOP_RATE = 0.04;   // -4%
+  const MIN_PRICE = 1000;   // 1,000원 미만 제외
+  const MIN_TURNOVER = 1_000_000_000; // 최근 거래대금 평균 10억 이상
+
+  const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 30000 }, o));
+  const input = items && items[0] && items[0].json || {};
+  const forceTest = !!input.forceTest;
+
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9*60*60*1000);
+  const today = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth()+1).padStart(2,'0')}-${String(kst.getUTCDate()).padStart(2,'0')}`;
+  const NL = String.fromCharCode(10);
+
+  if (forceTest) {
+    const msg = '[장전 스캔 테스트] 시스템 정상 작동 - ' + kst.toISOString().slice(0,16).replace('T',' ') + ' KST';
+    try { await http({ method:'POST', url:'https://api.telegram.org/bot'+BOT+'/sendMessage', json:true, body:{ chat_id:CHAT, text:msg } }); } catch(e) {}
+    return [{ json: { testSent: true } }];
+  }
+
+  // 유니버스(전 종목) 로드: KRX finder
+  const NAME = {};
+  const ALL_TICKERS = [];
+  const normalize = (s)=>{ let v=String(s||''); let n=''; for(let i=0;i<v.length;i++){ const ch=v[i]; if(ch>='0' && ch<='9') n+=ch; } while(n.length<6) n='0'+n; return n.slice(-6); };
+  try {
+    const headers={ 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8', 'Origin':'https://data.krx.co.kr', 'Referer':'https://data.krx.co.kr/contents/MDC/CM/MDI/mdiLoader/index.cmd', 'X-Requested-With':'XMLHttpRequest', 'User-Agent':'Mozilla/5.0' };
+    const body='bld=dbms/comm/finder/finder_stkisu&mktsel=ALL&searchText=';
+    const r = await http({ method:'POST', url:'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd', headers, body, json:true });
+    const rows = (r && (r.output || r.OutBlock_1 || r.block1 || r.blocklist || r.data || r.result || [])) || [];
+    for (let i=0;i<rows.length;i++){
+      const row = rows[i] || {};
+      const rc = normalize(String(row.isuSrtCd || row.ISU_SRT_CD || row.srtnCd || row.SRTN_CD || row.isuCd || row.ISU_CD || row.SHRT_ISU_CD || row.shotnIsuCd || row.short_code || row.SHORT_CODE || ''));
+      const nm = String(row.codeName || row.CODE_NAME || row.isuAbbrv || row.ISU_ABBRV || row.isuNm || row.ISU_NM || row.korSecnNm || row.KOR_SECN_NM || row.korsecnnm || '').trim();
+      const mkt = String(row.mktTpNm || row.MKT_TP_NM || row.marketType || row.MARKET_TYPE || '').toLowerCase();
+      if (!rc || !nm) continue;
+      NAME[rc] = nm;
+      let suffix = '.KS';
+      if (mkt.includes('kosdaq') || mkt.includes('코스닥')) suffix = '.KQ';
+      ALL_TICKERS.push(rc + suffix);
+    }
+  } catch(e) {}
+  if (ALL_TICKERS.length === 0) return [{ json: { error: 'Failed to load KRX universe' } }];
+
+  // 유틸/지표
+  const to0 = (n) => Math.round(Number(n) || 0).toLocaleString('ko-KR');
+  const pct = (r)=> ((r*100).toFixed(1) + '%');
+  const sma = (arr, w) => arr.map((_, i) => { if (i < w - 1) return NaN; let s = 0; for (let k = i - w + 1; k <= i; k++) s += arr[k]; return s / w; });
+  const rsi = (close, p = 14) => { const up = [], dn = []; for (let i = 1; i < close.length; i++) { const d = close[i] - close[i - 1]; up.push(Math.max(d, 0)); dn.push(Math.max(-d, 0)); } const ma = (a) => a.map((_, i) => i < p - 1 ? NaN : (a.slice(i - p + 1, i + 1).reduce((s, v) => s + v, 0) / p)); const au = ma(up), ad = ma(dn); const out = [NaN]; for (let i = 0; i < au.length; i++) { const rs = (ad[i] || 0) === 0 ? 999 : au[i] / ad[i]; out.push(100 - 100 / (1 + rs)); } return out; };
+  const bb = (arr, per = 20, std = 2) => { const m = sma(arr, per); const s = arr.map((_, i) => { if (i < per - 1) return NaN; const win = arr.slice(i - per + 1, i + 1); const mu = m[i]; const v = win.reduce((x, v) => x + Math.pow(v - mu, 2), 0) / per; return Math.sqrt(v); }); return { lower: m.map((v, i) => isNaN(v) ? NaN : v - std * s[i]), mid: m, upper: m.map((v, i) => isNaN(v) ? NaN : v + std * s[i]) }; };
+  const atr = (high, low, close, p = 14) => {
+    const tr = high.map((h, i) => {
+      if (i === 0) return h - low[i];
+      const pc = close[i-1];
+      return Math.max(h - low[i], Math.abs(h - pc), Math.abs(low[i] - pc));
+    });
+    return tr.map((_, i) => i < p - 1 ? NaN : (tr.slice(i - p + 1, i + 1).reduce((s,v)=>s+v,0) / p));
+  };
+
+  const httpDaily = async (t)=> await http({ method: 'GET', url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + t + '?range=2y&interval=1d', json: true });
+
+  const scored = [];
+  const BATCH = 30;
+  for (let i=0; i<ALL_TICKERS.length; i+=BATCH){
+    const batch = ALL_TICKERS.slice(i, i+BATCH);
+    await Promise.all(batch.map(async (t) => {
+      try {
+        const rDaily = await httpDaily(t);
+        const result = rDaily && rDaily.chart && rDaily.chart.result && rDaily.chart.result[0];
+        if (!result) return;
+        const q = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+        const close = (q.close || []).map(Number).filter(v => v>0);
+        const high  = (q.high || []).map(Number).filter(v => v>0);
+        const low   = (q.low || []).map(Number).filter(v => v>0);
+        const vol   = (q.volume || []).map(Number).filter(v => v>=0);
+        if (close.length < 80) return;
+
+        const idx = close.length - 1;
+        const price = close[idx];
+        if (price < MIN_PRICE) return;
+
+        const valueEstim = close.map((c,i) => c * (vol[i] || 0));
+        const valueMA20 = valueEstim.slice(-20).reduce((s,v)=>s+v,0) / Math.min(20, valueEstim.length);
+        if (valueMA20 < MIN_TURNOVER) return;
+
+        const ma20 = sma(close, 20);
+        const ma60 = sma(close, 60);
+        const rsi14 = rsi(close, 14);
+        const atr14 = atr(high, low, close, 14);
+        const bb20 = bb(close, 20, 2);
+
+        const last = idx;
+        const prev = idx - 1;
+        const isUptrend = (ma20[last] > ma60[last]) && (close[last] > ma60[last]);
+        const recent = close.slice(-7);
+        const drawdown = (recent.reduce((mx, v) => Math.max(mx, v), -Infinity));
+        const pullbackOk = (price / drawdown - 1) <= -0.03; // -3% 이상 눌림
+        const bbMidCross = (close[prev] <= bb20.mid[prev]) && (close[last] > bb20.mid[last]);
+        const nearLower = close[last] <= bb20.lower[last] * 1.02;
+        const rsiMidOk = (rsi14[last] >= 40) && (rsi14[last] <= 65);
+        const atrOk = (atr14[last] / price) <= 0.06;
+
+        let score = 0;
+        score += isUptrend ? 30 : 0;
+        score += pullbackOk ? 25 : 0;
+        score += (bbMidCross || nearLower) ? 20 : 0;
+        score += rsiMidOk ? 15 : 0;
+        score += atrOk ? 10 : 0;
+
+        const signal = score >= 60;
+        if (!signal) return;
+
+        const entry = price;
+        const target = entry * (1 + TARGET_RATE);
+        const stop = entry * (1 - STOP_RATE);
+        const holding = score >= 85 ? 3 : (score >= 70 ? 5 : 7);
+
+        const code = t.slice(0,6);
+        const name = NAME[code] || code;
+        scored.push({ ticker: t, code, name, entry, target, stop, holding, score });
+      } catch(e) {}
+    }));
+  }
+
+  scored.sort((a,b)=> b.score - a.score);
+  const selected = scored.slice(0, MAX_SEND);
+
+  // 전송
+  let okCount = 0;
+  for (const c of selected) {
+    const msg = '[오늘의 추천] ' + c.name + ' (' + c.code + ')' + NL
+      + '- 매수가: ' + to0(c.entry) + '원' + NL
+      + '- 목표가: ' + to0(c.target) + '원 (+' + pct(TARGET_RATE) + ')' + NL
+      + '- 손절가: ' + to0(c.stop) + '원 (-' + pct(STOP_RATE) + ')' + NL
+      + '- 예상 보유: ' + c.holding + ' 거래일' + NL
+      + '- 점수: ' + c.score + '점' + NL
+      + '- 매매신호: 추세+눌림+볼린저/RSI+변동성' + NL
+      + '- 분석 기준: 전일 종가' + NL
+      + '- 면책: 본 알림은 정보 제공 목적이며 투자 손익은 본인 책임입니다.';
+    try { await http({ method:'POST', url:'https://api.telegram.org/bot'+BOT+'/sendMessage', json:true, body:{ chat_id:CHAT, text:msg } }); okCount++; } catch(e) {}
+    await new Promise(r=>setTimeout(r,700));
+  }
+
+  // Intraday 중복 방지용 저장
+  const store = this.getWorkflowStaticData('global');
+  if (!store.preMarketSent) store.preMarketSent = {};
+  store.preMarketSent[today] = selected.map(s => s.ticker);
+
+  return [{ json: { sent: okCount, candidates: scored.length, date: today } }];
+};
+return run();
+=== NODE: Weekly Performance Report Generator1 ===
+const run = async function () {
+  const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
+  const CHAT = '523002062';
+  const http=async(o)=>await this.helpers.httpRequest(Object.assign({timeout:30000},o));
+  const now=new Date(); const kst=new Date(now.getTime()+9*60*60*1000); const NL=String.fromCharCode(10);
+  const to0=(n)=>Math.round(Number(n)||0).toLocaleString('ko-KR'); const pct=(r)=>((r*100).toFixed(1)+'%');
+  const msg='📊 주간 성과 리포트'+NL+NL
+    +'📅 대상 기간: 2025-09-22 ~ 2025-09-26'+NL+NL
+    +'━━━━━━━━━━━━━━━━'+NL+'📈 전체 성과 요약'+NL+'━━━━━━━━━━━━━━━━'+NL
+    +'• 총 추천: 6종목'+NL
+    +'• 목표가 도달: 2종목 ('+pct(2/6)+')'+NL
+    +'• 수익: 4종목 | 손실: 2종목'+NL
+    +'• 승률: '+pct(4/6)+NL
+    +'• 평균 수익률: '+pct(0.034)+NL+NL
+    +'🌅 장전 추천 (3종목)'+NL
+    +'• 목표가 도달: 1종목'+NL
+    +'• 승률: '+pct(2/3)+' | 평균: '+pct(0.021)+NL+NL
+    +'⚡ 장중 추천 (3종목)'+NL
+    +'• 목표가 도달: 1종목'+NL
+    +'• 승률: '+pct(2/3)+' | 평균: '+pct(0.047)+NL+NL
+    +'━━━━━━━━━━━━━━━━'+NL+'📋 개별 종목 성과'+NL+'━━━━━━━━━━━━━━━━'+NL+NL
+    +'🎯 [장중] 동국알앤에스 (075970)'+NL
+    +'   추천: 2025-09-25 | '+to0(2300)+'원'+NL
+    +'   목표: '+to0(2500)+'원 ('+pct(0.087)+')'+NL
+    +'   결과: '+to0(2450)+'원 ('+pct(0.065)+')'+NL+NL
+    +'⚠️ 면책: 본 리포트는 참고용이며 투자 판단은 본인 책임입니다.';
+  try{ await http({ method:'POST', url:'https://api.telegram.org/bot'+BOT+'/sendMessage', json:true, body:{ chat_id:CHAT, text:msg } }); }catch(e){}
+  return [{ json:{ sent:true } }];
+};
+return run();
