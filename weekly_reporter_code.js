@@ -5,6 +5,12 @@ const run = async function () {
   const NL = String.fromCharCode(10);
   const pct = (r) => (r >= 0 ? '+' : '') + (r * 100).toFixed(1) + '%';
 
+  // ===== Logger initialization (Zero Script QA) =====
+  const JsonLogger = require('./lib/logger');
+  const logger = new JsonLogger('weekly_reporter');
+  const requestId = logger.generateRequestId('REPORT');
+  logger.info('Weekly reporter started', { phase: 'initialization' }, requestId);
+
   const HOLIDAYS = ['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06','2026-07-17','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
 
   const now = new Date();
@@ -223,6 +229,18 @@ const run = async function () {
   const holdList = details.filter((d) => d.result === 'holding' || d.result === 'expired');
   const lossList = details.filter((d) => d.result === 'loss');
 
+  // Log report statistics for QA tracing
+  logger.info('Weekly report generated', {
+    reportDate: today,
+    totalPositions: details.length,
+    wins: wins,
+    partialWins: partialWins,
+    losses: losses,
+    holding: holdList.length,
+    winRate: (winRate * 100).toFixed(1) + '%',
+    enteredCount: enteredCount
+  }, requestId);
+
   // 각 섹션 내 수익률 기준 정렬
   winList.sort((a, b) => (b.maxReturn || 0) - (a.maxReturn || 0));
   holdList.sort((a, b) => (b.maxReturn || 0) - (a.maxReturn || 0));
@@ -358,6 +376,15 @@ const run = async function () {
     } catch (e) {}
     if (ci < chunks.length - 1) await sleep(500);
   }
+
+  // Log report completion
+  logger.info('Weekly report sent', {
+    reportDate: today,
+    messageChunks: chunks.length,
+    totalChars: msg.length,
+    positions: recs.length,
+    enteredCount: enteredCount
+  }, requestId);
 
   return [{ json: { sent: true, count: recs.length, enteredCount, wins, losses, winRate } }];
 };

@@ -62,6 +62,17 @@ const run = async function () {
   const INTRADAY_STR_BONUS = 10;    // 당일 강도 보너스
   const SECTOR_MOMENTUM_BONUS = 10; // 동일 업종 2개+ 동시 강세 보너스
   // ===== /급등·HIGH IMPACT 상수 =====
+  // ===== MACD/RSI 강화 + 위험 종목 필터 상수 (2026-04-19 개선) =====
+  const RSI_RISING_BONUS   = 10;  // RSI 상승 중(5일 전 대비) + 50 이상 보너스
+  const DELIST_CONSEC_DOWN = 5;   // 상장폐지 위험 연속 하락일 기준
+  const DELIST_VOL_DROP    = 0.3; // 상장폐지 위험 거래량 급감 비율 (30% 이하)
+  // ===== /MACD/RSI 강화 + 위험 종목 필터 상수 =====
+
+  // ===== Logger initialization (Zero Script QA) =====
+  const JsonLogger = require('./lib/logger');
+  const logger = new JsonLogger('swing_scanner');
+  const requestId = logger.generateRequestId('SCAN');
+  logger.info('Swing scanner started', { phase: 'initialization' }, requestId);
 
   const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 45000 }, o));
 
@@ -418,7 +429,7 @@ const run = async function () {
 
   const bl = store.blacklist || {};
   const riskSet = new Set((bl.riskCodes || []).map(String));
-  const themeFilterMode = String(bl.themeFilterMode || 'off').toLowerCase();
+  const themeFilterMode = String(bl.themeFilterMode || 'on').toLowerCase(); // 2026-04-19: 기본값 'on' 활성화
   const themeSet = (themeFilterMode === 'off') ? new Set() : new Set((bl.themeCodes || []).map(String));
   let excludedRisk = 0;
   let excludedTheme = 0;
@@ -993,6 +1004,17 @@ const run = async function () {
           if (!isSurgeCandidate && rsi14Val > RSI_MAX_ENTRY) return; // 일반: RSI 80 상한 유지
         }
 
+        // [DELIST-01] 상장폐지 위험 패턴 차단 (2026-04-19 개선)
+        // 5일 연속 하락 + 거래량 30% 급감 = 상장폐지 징후 패턴 (MIN_INTRADAY_TURNOVER 1차 차단 보완)
+        let consecDown = 0;
+        for (let ci = dIdx - 4; ci <= dIdx; ci++) {
+          if (ci > 0 && closeD[ci] < closeD[ci - 1]) consecDown++;
+        }
+        const recentVol4 = volD.slice(Math.max(0, dIdx - 3), dIdx + 1).reduce((a, b) => a + b, 0) / 4;
+        const prevVol5   = volD.slice(Math.max(0, dIdx - 8), dIdx - 3).reduce((a, b) => a + b, 0) / 5;
+        const volDropped = prevVol5 > 0 && (recentVol4 / prevVol5) < DELIST_VOL_DROP;
+        if (consecDown >= DELIST_CONSEC_DOWN && volDropped) return; // 상장폐지 위험 패턴 차단
+
         // [3] ADX(14) 추세 강도 필터
         const adxResult = calcADX(highD, lowD, closeD, dIdx, 14);
         if (Number.isFinite(adxResult.adx) && adxResult.adx < ADX_TREND_MIN) return; // 횡보장 차단
@@ -1067,10 +1089,13 @@ const run = async function () {
           signals.push('강추세(ADX)');
         }
 
-        // [NEW-3] RSI 모멘텀 구간 보너스 (65-75 = 강한 상승 모멘텀)
-        if (Number.isFinite(rsi14Val) && rsi14Val >= 65 && rsi14Val <= 75) {
-          score += 10;
-          signals.push('RSI모멘텀');
+        // [NEW-3] RSI 방향성 + 모멘텀 구간 보너스 (2026-04-19 개선: 방향성 추가)
+        // 5거래일 전 RSI 대비 현재 RSI 상승 여부 확인 (단순 범위 → 방향성 보완)
+        const rsi5DayAgo = calcRSI14(closeD, Math.max(0, dIdx - 5));
+        const rsiRising  = Number.isFinite(rsi5DayAgo) && rsi14Val > rsi5DayAgo;
+        if (Number.isFinite(rsi14Val)) {
+          if (rsiRising && rsi14Val >= 50) { score += RSI_RISING_BONUS; signals.push('RSI상승모멘텀'); }
+          if (rsi14Val >= 65 && rsi14Val <= 75) { score += 5; signals.push('RSI골든존'); } // 축소: 10→5 (방향성 보너스와 합산)
         }
 
         // [NEW-4] 52주 신고가 돌파 / 근접도 보너스 (PTH)
@@ -1221,6 +1246,11 @@ const run = async function () {
         // OBV 수급 확인 OR RVOL A등급(3x+) 중 하나 必 — 실제 매수세 없는 패턴 종목 차단
         const hasSupply = (obvResult.obvTrend === 1) || (rvolVal >= RVOL_GRADE_A);
         if (!hasSupply && grade !== '강매') return;
+        // [MACD-01] MACD 히스토그램 연속 하락 → 강매 제외 차단 (2026-04-19 개선)
+        // -10점 패널티만으론 총점 높은 종목 통과 가능 → 필수 차단 조건으로 강화
+        const macdNegativeTrend = Number.isFinite(macdResult.hist) && macdResult.hist < 0
+                                && Number.isFinite(macdResult.histPrev) && macdResult.histPrev < 0;
+        if (macdNegativeTrend && grade !== '강매') return; // 하락 모멘텀 종목 차단 (강매는 예외)
         // 요일별 rankScore 보정 (d = kst.getUTCDay(), 상단에서 선언됨)
         const dowAdj = (d === 4) ? DOW_BONUS_THU     // 목요일 +3
                      : (d === 3) ? DOW_BONUS_WED     // 수요일 +2
@@ -1266,6 +1296,14 @@ const run = async function () {
           timeStr: timeStrNow, type: '스윙',
           rankScore, atrAbs, rvolVal, riskOn, qty, strictPass, relaxedPass, grade,
         });
+
+        // Log grade assignment for QA tracing
+        logger.info(`Stock grade assigned: ${t}`, {
+          ticker: t, code, grade, score: rankScore,
+          target: target.toFixed(0), stop: stop.toFixed(0),
+          rvolVal: rvolVal.toFixed(2), dailyChange: (dailyChange * 100).toFixed(1) + '%',
+          signals: signals.slice(0, 3).join(',')
+        }, requestId);
       } catch (e) {
         naverErrorCount++;
         const st = pickStatus(e);
@@ -1417,6 +1455,11 @@ const run = async function () {
     } catch (e) {
       sendFailCount++;
       if (sendFailSamples.length < 3) sendFailSamples.push({ ticker: c.ticker, message: String(e?.message || e) });
+      logger.error(`Failed to send notification: ${c.ticker}`, {
+        ticker: c.ticker,
+        grade: c.grade,
+        error: String(e?.message || e).slice(0, 200)
+      }, requestId);
       return null;
     }
   };
@@ -1425,6 +1468,16 @@ const run = async function () {
     const res = await send(selected[i]);
     if (res) {
       store.swingSent[selected[i].ticker] = now.getTime();
+
+      // Log successful notification send
+      logger.info(`Stock notification sent: ${selected[i].ticker}`, {
+        ticker: selected[i].ticker,
+        grade: selected[i].grade,
+        entry: res.entry.toFixed(0),
+        target: res.target.toFixed(0),
+        stop: res.stop.toFixed(0),
+        rankScore: selected[i].rankScore
+      }, requestId);
 
       const today2 = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, '0')}-${String(kst.getUTCDate()).padStart(2, '0')}`;
       if (!store.weeklyRecommendations) store.weeklyRecommendations = {};
@@ -1482,6 +1535,22 @@ const run = async function () {
   }
 
   store.swingMeta._lastFullFinish = Date.now();
+
+  // Log scan completion
+  logger.info('Swing scanner completed', {
+    scanTime: kst.toISOString(),
+    totalUniverse: ALL_TICKERS.length,
+    candidates: candidates.length,
+    sent: sent.length,
+    sentTickers: sent.slice(0, 10).join(','),
+    excludedRisk, excludedTheme,
+    naverApiStats: {
+      ok: naverOkCount,
+      noResult: naverNoResultCount,
+      error: naverErrorCount
+    }
+  }, requestId);
+
   return [{
     json: {
       scanTime: kst.toISOString(),
