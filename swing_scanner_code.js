@@ -12,7 +12,8 @@ const run = async function () {
   const RISK_PCT_PER_TRADE = 0.005;
   const ATR_WINDOW = 14;
   const ATR_STOP_MULT = 1.9;
-  const ATR_TARGET_MULT = 2.8;
+  const ATR_TARGET_MULT = 2.8;        // 강매 등급 전용 목표 배수 (5거래일 보유)
+  const ATR_TARGET_MULT_NORMAL = 2.0; // 급등·기타 등급 목표 배수 (2026-04-18 개선: 목표 도달률 향상)
   const CAP_STOP_PCT = 0.10;
   const CAP_TARGET_PCT = 0.25;
   const MAX_INTRADAY_SENDS = 4;
@@ -38,7 +39,7 @@ const run = async function () {
   const HOLD_STRONG = 5;          // 강매 등급 보유 기간 10→5거래일 (단기화)
   const HOLD_NORMAL = 6;          // 매수 등급 보유 기간 (발송 차단이므로 실질 미사용)
   const HOLD_WEAK = 2;            // 완화 통과 종목 보유 기간 (거래일)
-  const HOLD_SHORTTRADE = 2;      // 매도차익 등급 보유 기간 (거래일)
+  const HOLD_SHORTTRADE = 3;      // 매도차익 등급 보유 기간 (거래일) (2026-04-18 개선: 2→3, 목표 도달 시간 확보)
   const TARGET1_PCT = 0.07;       // 1차 목표 비율 (데이터 5~10% 구간 중앙값 7%)
   const ATR_TARGET_SHORT = 1.5;   // 매도차익 등급 목표 배수 (ATR 1.5x)
   const DOW_BONUS_THU = 3;        // 목요일 rankScore 보너스
@@ -51,7 +52,7 @@ const run = async function () {
   const SURGE_SCORE_BONUS = 50;     // 급등 조건 충족 시 추가 점수
   const CONSEC_UP_BONUS   = 15;     // 2일+ 연속 양봉 거래량 확대 보너스
   const NEW_HIGH52W_BONUS = 40;     // 52주 신고가 돌파 보너스
-  const HOLD_SURGE        = 2;      // 급등 등급 보유 기간 (거래일)
+  const HOLD_SURGE        = 3;      // 급등 등급 보유 기간 (거래일) (2026-04-18 개선: 2→3, 목표 도달 시간 확보)
   const SCORE_SURGE       = 100;    // 급등 등급 점수 기준
   // ===== HIGH IMPACT 정밀 지표 상수 =====
   const VOL_TREND_5_60_B  = 2.0;    // 5/60일 거래량 비율 B등급
@@ -1073,14 +1074,15 @@ const run = async function () {
         }
 
         // [NEW-4] 52주 신고가 돌파 / 근접도 보너스 (PTH)
+        // (2026-04-18 개선: 신고가 근접 점수 하향 — 저항선 위 물량 있는 종목 과대평가 방지)
         if (currentPrice >= high252) {
-          score += NEW_HIGH52W_BONUS; // +40: 진짜 신고가 돌파
+          score += NEW_HIGH52W_BONUS; // +40: 진짜 신고가 돌파 (저항선 없음)
           signals.push('52주신고가돌파');
         } else if (pth >= 0.95) {
-          score += 25;
+          score += 15; // 25→15: 저항선 5% 이내 위험 반영
           signals.push('신고가근접(PTH)');
         } else if (pth >= 0.90) {
-          score += 15;
+          score += 8;  // 15→8: 저항선 10% 이내 위험 반영
           signals.push('52주고점근접');
         }
 
@@ -1215,6 +1217,10 @@ const run = async function () {
                     : strictPass    ? '매수'
                     : '관심';
         if (grade === '관심' || grade === '매수') return; // 관심·매수 등급 미발송
+        // [OBV-01] 수급 필수 조건 (강매 제외) — 2026-04-18 개선
+        // OBV 수급 확인 OR RVOL A등급(3x+) 중 하나 必 — 실제 매수세 없는 패턴 종목 차단
+        const hasSupply = (obvResult.obvTrend === 1) || (rvolVal >= RVOL_GRADE_A);
+        if (!hasSupply && grade !== '강매') return;
         // 요일별 rankScore 보정 (d = kst.getUTCDay(), 상단에서 선언됨)
         const dowAdj = (d === 4) ? DOW_BONUS_THU     // 목요일 +3
                      : (d === 3) ? DOW_BONUS_WED     // 수요일 +2
@@ -1224,7 +1230,10 @@ const run = async function () {
 
         const atrAbs = calcAtrAbs(highD, lowD, dIdx, ATR_WINDOW);
         let stop = currentPrice - atrAbs * ATR_STOP_MULT;
-        const targetMult = (grade === '매도차익') ? ATR_TARGET_SHORT : ATR_TARGET_MULT;
+        // TARGET-01: 등급별 목표 배수 분기 — 2026-04-18 개선 (강매만 2.8x, 나머지 2.0x)
+        const targetMult = (grade === '강매')     ? ATR_TARGET_MULT        // 강매: ATR×2.8 (5거래일)
+                         : (grade === '매도차익') ? ATR_TARGET_SHORT       // 매도차익: ATR×1.5
+                         : ATR_TARGET_MULT_NORMAL;                          // 급등·기타: ATR×2.0
         let target = currentPrice + atrAbs * targetMult;
         const stopCap = currentPrice * (1 - CAP_STOP_PCT);
         const targetCap = currentPrice * (1 + CAP_TARGET_PCT);

@@ -1,14 +1,35 @@
 {
   "version": "1.0",
-  "enabled": false,
+  "enabled": true,
   "teamName": "",
   "feature": "showmoneyv2",
   "pdcaPhase": "do",
   "orchestrationPattern": "leader",
   "ctoAgent": "opus",
-  "startedAt": "2026-04-11T13:00:39.971Z",
-  "lastUpdated": "2026-04-11T13:05:35.122Z",
-  "teammates": [],
+  "startedAt": "2026-04-19T02:49:57.181Z",
+  "lastUpdated": "2026-04-19T02:55:26.515Z",
+  "teammates": [
+    {
+      "name": "ac3d224bfca563516",
+      "role": "bkit:qa-monitor",
+      "model": "sonnet",
+      "status": "completed",
+      "currentTask": null,
+      "taskId": null,
+      "startedAt": "2026-04-19T02:49:57.188Z",
+      "lastActivityAt": "2026-04-19T02:54:40.073Z"
+    },
+    {
+      "name": "a71a686109b0a3abb",
+      "role": "bkit:qa-monitor",
+      "model": "sonnet",
+      "status": "spawning",
+      "currentTask": null,
+      "taskId": null,
+      "startedAt": "2026-04-19T02:55:26.512Z",
+      "lastActivityAt": "2026-04-19T02:55:26.512Z"
+    }
+  ],
   "progress": {
     "totalTasks": 0,
     "completedTasks": 0,
@@ -17,5 +38,5 @@
     "pendingTasks": 0
   },
   "recentMessages": [],
-  "sessionId": "c7563c15-b2e4-4771-92eb-d2cad1052803"
+  "sessionId": "342761f4-febc-4bc3-858f-8dc01c8ffde4"
 }
