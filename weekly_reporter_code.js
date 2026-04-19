@@ -5,9 +5,14 @@ const run = async function () {
   const NL = String.fromCharCode(10);
   const pct = (r) => (r >= 0 ? '+' : '') + (r * 100).toFixed(1) + '%';
 
-  // ===== Logger initialization (Zero Script QA) =====
-  const JsonLogger = require('./lib/logger');
-  const logger = new JsonLogger('weekly_reporter');
+  // ===== Logger initialization (n8n sandbox safe) =====
+  let logger;
+  try {
+    const JsonLogger = require('./lib/logger');
+    logger = new JsonLogger('weekly_reporter');
+  } catch (e) {
+    logger = { info:()=>{}, error:()=>{}, warning:()=>{}, debug:()=>{}, generateRequestId:(p)=>`${p}_${Date.now()}` };
+  }
   const requestId = logger.generateRequestId('REPORT');
   logger.info('Weekly reporter started', { phase: 'initialization' }, requestId);
 

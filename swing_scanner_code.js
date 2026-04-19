@@ -69,8 +69,15 @@ const run = async function () {
   // ===== /MACD/RSI 강화 + 위험 종목 필터 상수 =====
 
   // ===== Logger initialization (Zero Script QA) =====
-  const JsonLogger = require('./lib/logger');
-  const logger = new JsonLogger('swing_scanner');
+  // n8n Function 노드 샌드박스에서 로컬 파일 require 불가 → try/catch로 안전 처리
+  // 로컬 환경(개발/테스트)에서는 lib/logger.js 사용, n8n 실행 시 no-op fallback
+  let logger;
+  try {
+    const JsonLogger = require('./lib/logger');
+    logger = new JsonLogger('swing_scanner');
+  } catch (e) {
+    logger = { info:()=>{}, error:()=>{}, warning:()=>{}, debug:()=>{}, generateRequestId:(p)=>`${p}_${Date.now()}` };
+  }
   const requestId = logger.generateRequestId('SCAN');
   logger.info('Swing scanner started', { phase: 'initialization' }, requestId);
 
@@ -1483,10 +1490,10 @@ const run = async function () {
       if (!store.weeklyRecommendations) store.weeklyRecommendations = {};
       if (!store.weeklyRecommendations[today2]) store.weeklyRecommendations[today2] = [];
 
-      // 보유 기간 동적 계산 (단기화: 강매→5일, 급등→2일, 매도차익→2일)
+      // 보유 기간 동적 계산 (강매→5일, 급등→3일, 매도차익→3일) (2026-04-18 개선: 급등·매도차익 2→3)
       const holdDays = (selected[i].grade === '강매')     ? HOLD_STRONG     // 5거래일
-                     : (selected[i].grade === '급등')     ? HOLD_SURGE      // 2거래일
-                     : (selected[i].grade === '매도차익') ? HOLD_SHORTTRADE // 2거래일
+                     : (selected[i].grade === '급등')     ? HOLD_SURGE      // 3거래일
+                     : (selected[i].grade === '매도차익') ? HOLD_SHORTTRADE // 3거래일
                      : HOLD_WEAK;
 
       store.weeklyRecommendations[today2].push({
