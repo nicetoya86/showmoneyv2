@@ -3,8 +3,8 @@
 // 목적: store.weeklyRecommendations의 활성 포지션에 트레일링 스탑 적용
 //       스탑 레벨 상승 시 Telegram 알림 발송
 
-const BOT  = $env.TELEGRAM_BOT_TOKEN;
-const CHAT = $env.TELEGRAM_CHAT_ID;
+const BOT  = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
+const CHAT = '523002062';
 
 const NL = '\n';
 
@@ -17,17 +17,11 @@ const TRAIL_MULT_5    = 1.5;
 const TRAIL_MULT_10   = 1.0;
 const TRAIL_MULT_15   = 0.7;
 
-const store = $node["Globals"].json.store || {};
+const store = this.getWorkflowStaticData('global');
 const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 30000 }, o));
 
 const to0 = (v) => Math.round(v).toLocaleString('ko-KR');
 const pct = (v) => (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
-
-// ===== Logger initialization (Zero Script QA) =====
-const JsonLogger = require('./lib/logger');
-const logger = new JsonLogger('position_monitor');
-const requestId = logger.generateRequestId('MONITOR');
-logger.info('Position monitor started', { phase: 'initialization' }, requestId);
 
 // ===== KST 기준 오늘 날짜 =====
 const now = new Date();
@@ -111,18 +105,8 @@ for (const dateKey of allDates) {
 }
 
 if (!activePositions.length) {
-  logger.info('No active positions found', {
-    today,
-    message: '활성 포지션 없음'
-  }, requestId);
   return [{ json: { message: '활성 포지션 없음', today, checked: 0 } }];
 }
-
-logger.info(`Position monitoring started`, {
-  today,
-  activePositions: activePositions.length,
-  positions: activePositions.map(p => `${p.code}(${p.grade})`).join(',')
-}, requestId);
 
 // ===== 각 포지션 처리 =====
 const alerts = [];
@@ -154,18 +138,6 @@ for (const rec of activePositions) {
     const oldStopPct = entry > 0 ? pct((oldStop - entry) / entry) : 'N/A';
     const newStopPct = entry > 0 ? pct((newStop - entry) / entry) : 'N/A';
 
-    // Log stop update for QA tracing
-    logger.info(`Stop level raised: ${rec.code}`, {
-      code: rec.code,
-      ticker: rec.ticker,
-      grade: rec.grade,
-      currentPrice: close,
-      gain: gainPct,
-      oldStop: oldStop.toFixed(0),
-      newStop: newStop.toFixed(0),
-      atr: atr.toFixed(0)
-    }, requestId);
-
     alerts.push(
       '[🛡️ 스탑 상향] ' + (rec.name || rec.code) + '(' + rec.code + ')' + NL +
       '현재가: ' + to0(close) + '원 (' + gainPct + ')' + NL +
@@ -192,14 +164,6 @@ for (const alertMsg of alerts) {
 
 // store 반영 (n8n Globals 노드가 있다면 별도 Set 노드로 저장 필요)
 // store.weeklyRecommendations는 이미 참조로 수정됨
-
-// Log monitoring completion
-logger.info('Position monitoring completed', {
-  today,
-  activePositions: activePositions.length,
-  updated: updated,
-  alertsSent: alerts.length
-}, requestId);
 
 return [{
   json: {
