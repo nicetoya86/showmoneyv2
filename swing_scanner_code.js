@@ -4,23 +4,55 @@ const run = async function () {
   const MIN_PRICE = 1000;
   const MIN_INTRADAY_TURNOVER = 3000000000; // 30억 KRW (rate-limiting 방지)
   const MIN_SCORE = 80;         // 매수 등급 점수 기준 (발송은 차단, 스코어링 기준으로만 유지)
-  const RELAX_SCORE = 60;       // 관심 등급 점수 기준 (50→60 상향, 저품질 차단)
+  const RELAX_SCORE = 90;       // 당일단타 품질 강화: 급등(100+)/강매(120+) 등급만 통과 (2026-04-25)
   const MIN_DAILY_PICKS = 0;    // filler 채움 비활성화 — 0건이어도 발송 안 함 (품질 우선)
   // (PMAT_STRICT, PMAT_RELAX 제거 — HITALK 모델 제거로 불필요)
 
   const ACCOUNT_KRW = 10000000;
   const RISK_PCT_PER_TRADE = 0.005;
   const ATR_WINDOW = 14;
-  const ATR_STOP_MULT = 1.9;
-  const ATR_TARGET_MULT = 2.8;        // 강매 등급 전용 목표 배수 (5거래일 보유)
-  const ATR_TARGET_MULT_NORMAL = 2.0; // 급등·기타 등급 목표 배수 (2026-04-18 개선: 목표 도달률 향상)
-  const CAP_STOP_PCT = 0.10;
-  const CAP_TARGET_PCT = 0.25;
-  const MAX_INTRADAY_SENDS = 4;
+  const ATR_STOP_MULT = 1.0;          // 당일단타: 손절 배수 축소 (2026-04-25)
+  const ATR_TARGET_MULT = 0.8;        // 당일단타: 강매 등급 목표 배수 (2026-04-25)
+  const ATR_TARGET_MULT_NORMAL = 0.6; // 당일단타: 급등·기타 등급 목표 배수 (2026-04-25)
+  const CAP_STOP_PCT = 0.03;          // 당일단타: 최대 손절 -3% (2026-04-25)
+  const CAP_TARGET_PCT = 0.07;        // 당일단타: 최대 목표 +7% (2026-04-25)
+  const MAX_INTRADAY_SENDS = 2;       // 당일단타: 집중 대응을 위해 최대 2종목 (2026-04-25)
   const HOLIDAYS = ['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06','2026-07-17','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
-  const DUPLICATE_WINDOW_MINUTES = 4320; // 3일 (스윙 보유기간 반영, 동일 종목 재추천 방지)
-  const STOP_NEW_ALERTS_HOUR = 15;
-  const STOP_NEW_ALERTS_MINUTE = 20;
+  const DUPLICATE_WINDOW_MINUTES = 480;  // 당일단타: 8시간 중복 차단 (2026-04-25)
+  // ===== Regime 임계값 상수 (2026-05-02 Option-3 개선) =====
+  const REGIME_YEST_DOWN = -0.015; // 전일 지수 -1.5% 이하 → 약세 판정
+  const REGIME_GAP_DOWN  = -0.007; // 당일 시초 갭다운 -0.7% 이하 → 약세 판정
+  const REGIME_SMA_FAST  = 5;      // 빠른 이평 기간 (SMA5 vs SMA20)
+  // ===== /Regime 임계값 상수 =====
+  // ===== 전일 급등 진입 억제 상수 (2026-05-02) =====
+  const MAX_ENTRY_SURGE_PCT  = 0.10; // 전일대비 10% 초과 → 절대 차단
+  const SURGE_ZONE_PCT       = 0.08; // 전일대비 8% 이상 → 고점수 요구 구간 시작
+  const SURGE_ZONE_MIN_SCORE = 270;  // 급등 구간 최소 통과 점수
+  // ===== /전일 급등 진입 억제 상수 =====
+  // ===== swing-quality-improvement 개선 상수 (2026-05-09) =====
+  const ETF_EXCLUDE_KEYWORDS = ['채권혼합', '채권형', '혼합형', '커버드콜', '배당혼합', '고배당혼합', '인버스', '레버리지'];
+  const ETF_PROVIDERS = ['KODEX', 'TIGER', 'KBSTAR', 'ACE', 'SOL', 'HANARO', 'TIMEFOLIO', 'ARIRANG', 'KOSEF', 'MASTER', 'MAHANMI'];
+  const ETF_SCORE_PENALTY    = 15;   // ETF rankScore 패널티 (개별주 대비 기울기 보정)
+  const MIN_SCORE_V2         = 100;  // 개선된 최소 통과 점수 (80→100)
+  const MAX_WEEKLY_SENDS     = 5;    // 주간 최대 추천 건수
+  const MAX_ETF_PER_SEND     = 1;    // 1회 발송 ETF 최대 1건
+  const MAX_STOCK_PER_SEND   = 1;    // 1회 발송 개별주 최대 1건
+  const INTRADAY_STOP_THRESH = 2;    // 당일 손절 카운터 임계값 (이상 시 발송 억제)
+  const STOCK_MIN_TURNOVER   = 5_000_000_000; // 개별주 최소 거래대금 50억
+  const STOCK_RSI_MAX        = 85;   // 개별주 RSI 상한 완화 (ETF:80, 개별주:85)
+  const STOCK_ADX_MIN        = 15;   // 개별주 ADX 최소 완화 (ETF:20, 개별주:15)
+  const CORRELATION_GROUPS   = [     // 동일 기초자산 그룹 (주간 1건 한도)
+    ['삼성전자', '삼성그룹', '삼성'],
+    ['차이나', '중국', 'china'],
+    ['반도체', 'AI반도체', 'FACTSET', 'semiconductor'],
+    ['나스닥', '미국나스닥', 'nasdaq'],
+    ['코스피200', 'KRX300'],
+  ];
+  // ===== /swing-quality-improvement 개선 상수 =====
+  const ALERT_START_HOUR   = 9;           // 당일단타: 알림 시작 09:00 KST (2026-04-25)
+  const ALERT_START_MINUTE = 0;           // 시초가 직후부터 스캔 허용
+  const STOP_NEW_ALERTS_HOUR = 11;       // 당일단타: 오전 알림만 허용 (2026-04-25)
+  const STOP_NEW_ALERTS_MINUTE = 30;     // 09:00~11:30 KST 유효 창
   const MIN_AVG5_VOLUME = 30000; // 최소 5일 평균 거래량 (저유동성 종목 제외)
 
   // ===== 단기 고수익 포착 상수 (2026-04-11 개선) =====
@@ -36,12 +68,12 @@ const run = async function () {
   // ===== /단기 고수익 포착 상수 =====
   // ===== 실증 데이터 기반 개선 상수 (2026-03-29, 3504건 분석) =====
   const SCORE_STRONG = 120;       // 강매 등급 점수 기준
-  const HOLD_STRONG = 5;          // 강매 등급 보유 기간 10→5거래일 (단기화)
-  const HOLD_NORMAL = 6;          // 매수 등급 보유 기간 (발송 차단이므로 실질 미사용)
-  const HOLD_WEAK = 2;            // 완화 통과 종목 보유 기간 (거래일)
-  const HOLD_SHORTTRADE = 3;      // 매도차익 등급 보유 기간 (거래일) (2026-04-18 개선: 2→3, 목표 도달 시간 확보)
+  const HOLD_STRONG = 1;          // 당일단타: 전 등급 당일 청산 (2026-04-25)
+  const HOLD_NORMAL = 1;          // 당일단타: 전 등급 당일 청산 (2026-04-25)
+  const HOLD_WEAK = 1;            // 당일단타: 전 등급 당일 청산 (2026-04-25)
+  const HOLD_SHORTTRADE = 1;      // 당일단타: 전 등급 당일 청산 (2026-04-25)
   const TARGET1_PCT = 0.07;       // 1차 목표 비율 (데이터 5~10% 구간 중앙값 7%)
-  const ATR_TARGET_SHORT = 1.5;   // 매도차익 등급 목표 배수 (ATR 1.5x)
+  const ATR_TARGET_SHORT = 0.6;   // 당일단타: 매도차익 등급 목표 배수 (2026-04-25)
   const DOW_BONUS_THU = 3;        // 목요일 rankScore 보너스
   const DOW_BONUS_WED = 2;        // 수요일 rankScore 보너스
   const DOW_PENALTY_FRI = 5;      // 금요일 rankScore 패널티
@@ -52,7 +84,7 @@ const run = async function () {
   const SURGE_SCORE_BONUS = 50;     // 급등 조건 충족 시 추가 점수
   const CONSEC_UP_BONUS   = 15;     // 2일+ 연속 양봉 거래량 확대 보너스
   const NEW_HIGH52W_BONUS = 40;     // 52주 신고가 돌파 보너스
-  const HOLD_SURGE        = 3;      // 급등 등급 보유 기간 (거래일) (2026-04-18 개선: 2→3, 목표 도달 시간 확보)
+  const HOLD_SURGE        = 1;      // 당일단타: 전 등급 당일 청산 (2026-04-25)
   const SCORE_SURGE       = 100;    // 급등 등급 점수 기준
   // ===== HIGH IMPACT 정밀 지표 상수 =====
   const VOL_TREND_5_60_B  = 2.0;    // 5/60일 거래량 비율 B등급
@@ -67,6 +99,24 @@ const run = async function () {
   const DELIST_CONSEC_DOWN = 5;   // 상장폐지 위험 연속 하락일 기준
   const DELIST_VOL_DROP    = 0.3; // 상장폐지 위험 거래량 급감 비율 (30% 이하)
   // ===== /MACD/RSI 강화 + 위험 종목 필터 상수 =====
+  // ===== 당일단타 신규 신호 상수 (2026-04-25) =====
+  const DART_API_KEY     = '34a9b090d2a7b1ee689a240fef68667d36b389e7'; // DART OpenAPI 키
+  const GAP_UP_MIN       = 0.01;   // 갭업 신호 하한 +1%
+  const GAP_UP_MAX       = 0.05;   // 갭업 추격 차단 상한 +5%
+  const GAP_DOWN_BLOCK   = -0.03;  // 갭다운 차단 하한 -3%
+  const GAP_UP_SCORE     = 10;     // 갭업 보너스 점수
+  const LIMIT_ROOM_MIN   = 0.05;   // 상한가 잔여 여력 최소 5% (미만 시 추격 차단)
+  const LIMIT_ROOM_LOW   = 0.10;   // 상한가 잔여 여력 보너스 하한 10%
+  const LIMIT_ROOM_HIGH  = 0.30;   // 상한가 잔여 여력 보너스 상한 30%
+  const LIMIT_ROOM_SCORE = 15;     // 상한가 여력 보너스 점수
+  const SUP_NETBUY_MIN   = 500_000_000;    // 외국인/기관 순매수 최소 기준 5억
+  const SUP_DUAL_SCORE   = 20;     // 외국인+기관 동반 순매수 보너스
+  const SUP_SINGLE_SCORE_FRGN = 15; // 외국인 단독 순매수 보너스
+  const SUP_SINGLE_SCORE_ORG  = 10; // 기관 단독 순매수 보너스
+  const PGM_CAUTION_THRESHOLD = -500_000_000_000; // 프로그램 순매도 경고 기준 -5천억
+  const DART_POSITIVE_SCORE  = 20;  // 긍정 공시 보너스
+  const DART_MINOR_SCORE     = 5;   // 기타 공시 소폭 보너스
+  // ===== /당일단타 신규 신호 상수 =====
 
   // ===== Logger initialization (Zero Script QA) =====
   // n8n Function 노드 샌드박스에서 로컬 파일 require 불가 → try/catch로 안전 처리
@@ -82,6 +132,30 @@ const run = async function () {
   logger.info('Swing scanner started', { phase: 'initialization' }, requestId);
 
   const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 45000 }, o));
+
+  // ===== ETF 감지 헬퍼 (2026-05-09) =====
+  const isETFName = (nm) => {
+    const upper = String(nm || '').toUpperCase();
+    if (ETF_PROVIDERS.some(p => upper.startsWith(p))) return true;
+    if (upper.includes('ETF') || upper.includes('인덱스펀드')) return true;
+    return false;
+  };
+  // 상관관계 그룹 내 동일 주간 중복 여부 확인
+  const isCorrelationDuplicate = (nm, weeklyRecs) => {
+    const nmLC = String(nm || '').toLowerCase();
+    for (const group of CORRELATION_GROUPS) {
+      const matchesGroup = group.some(kw => nmLC.includes(kw.toLowerCase()));
+      if (!matchesGroup) continue;
+      // 이번 주 이미 동일 그룹 종목이 발송됐는지 확인
+      for (const rec of weeklyRecs) {
+        if (!rec || !rec.name) continue;
+        const recLC = rec.name.toLowerCase();
+        if (group.some(kw => recLC.includes(kw.toLowerCase()))) return true;
+      }
+    }
+    return false;
+  };
+  // ===== /ETF 감지 헬퍼 =====
 
   const sma = (arr, w) => {
     const out = new Array(arr.length).fill(NaN);
@@ -337,24 +411,128 @@ const run = async function () {
     } catch(e) { return []; }
   };
 
+  // [REGIME-OPT3] KOSPI/KOSDAQ OHLC 반환 — 당일 갭 감지용 (2026-05-02)
+  // [BUGFIX-2026-05-07] Naver fchart 지수 미반환 시 Yahoo Finance fallback 추가
+  const fetchDailyOHLC = async (encodedTicker) => {
+    try {
+      const symbolMap = { '%5EKS11': 'KOSPI', '%5EKQ11': 'KOSDAQ' };
+      const symbol = symbolMap[encodedTicker] || encodedTicker;
+      let raw = await fetchDailyFchart(symbol, 120);
+
+      // Fallback: Naver fchart이 지수 OHLC를 반환하지 못할 경우 Yahoo Finance 사용
+      if (!raw || !raw.length) {
+        try {
+          const yUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodedTicker}?interval=1d&range=6mo`;
+          const yResp = await http({
+            method: 'GET', url: yUrl, json: true,
+            headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' },
+          });
+          const yResult = yResp?.chart?.result?.[0];
+          if (yResult) {
+            const timestamps = yResult.timestamp || [];
+            const q = yResult.indicators?.quote?.[0] || {};
+            raw = timestamps.map((ts, i) => ({
+              localDate: new Date(ts * 1000).toISOString().slice(0, 10).replace(/-/g, ''),
+              openPrice:  Number((q.open   || [])[i]) || 0,
+              highPrice:  Number((q.high   || [])[i]) || 0,
+              lowPrice:   Number((q.low    || [])[i]) || 0,
+              closePrice: Number((q.close  || [])[i]) || 0,
+              accumulatedTradingVolume: Number((q.volume || [])[i]) || 0,
+            })).filter(r => r.closePrice > 0 && /^\d{8}$/.test(r.localDate));
+          }
+        } catch(_) { /* Yahoo fallback 실패 → 빈 배열 반환 */ }
+      }
+
+      if (!raw || !raw.length) return [];
+      return raw.map(d => ({
+        date:  d.localDate,
+        open:  d.openPrice  > 0 ? d.openPrice  : d.closePrice,
+        high:  d.highPrice  > 0 ? d.highPrice  : d.closePrice,
+        low:   d.lowPrice   > 0 ? d.lowPrice   : d.closePrice,
+        close: d.closePrice,
+      }));
+    } catch(e) { return []; }
+  };
+
+  // [REGIME-OPT3] 3단계 Regime + 당일 갭 감지 (2026-05-02 개선)
+  // regimeLevel: 0=강세(전 등급 허용), 1=중립(매도차익 차단), 2=약세(강매 전용)
   const getMarketRegime = async (store, today) => {
     if (!store.regimeCache) store.regimeCache = {};
-    if (store.regimeCache.date === today && store.regimeCache.riskOn !== undefined) return store.regimeCache;
-    let riskOn = true;
-    let ks = null;
-    let kq = null;
+    if (store.regimeCache.date === today && store.regimeCache.regimeLevel !== undefined)
+      return store.regimeCache;
+
+    let regimeLevel = 0;
+    let ks = null, kq = null, ksUpFast = null, kqUpFast = null;
+    let ksGap = 0, kqGap = 0, gapSource = 'none';
+
     try {
-      const [ksClose, kqClose] = await Promise.all([fetchDailyClose('%5EKS11'), fetchDailyClose('%5EKQ11')]);
+      const [ksOHLC, kqOHLC] = await Promise.all([
+        fetchDailyOHLC('%5EKS11'),
+        fetchDailyOHLC('%5EKQ11'),
+      ]);
+      if (!ksOHLC.length || !kqOHLC.length) throw new Error('empty OHLC');
+
+      const iKs = ksOHLC.length - 1;
+      const iKq = kqOHLC.length - 1;
+      const ksClose = ksOHLC.map(d => d.close);
+      const kqClose = kqOHLC.map(d => d.close);
+
+      // 기존: SMA20 vs SMA60 (중장기 추세)
       const ks20 = sma(ksClose, 20); const ks60 = sma(ksClose, 60);
       const kq20 = sma(kqClose, 20); const kq60 = sma(kqClose, 60);
-      const iKs = ksClose.length - 1; const iKq = kqClose.length - 1;
-      ks = (Number.isFinite(ks20[iKs]) && Number.isFinite(ks60[iKs])) ? (ks20[iKs] > ks60[iKs]) : null;
-      kq = (Number.isFinite(kq20[iKq]) && Number.isFinite(kq60[iKq])) ? (kq20[iKq] > kq60[iKq]) : null;
-      if (ks === false || kq === false) riskOn = false;
+      ks = (Number.isFinite(ks20[iKs]) && Number.isFinite(ks60[iKs]))
+           ? ks20[iKs] > ks60[iKs] : null;
+      kq = (Number.isFinite(kq20[iKq]) && Number.isFinite(kq60[iKq]))
+           ? kq20[iKq] > kq60[iKq] : null;
+
+      // 신규: SMA5 vs SMA20 (단기 모멘텀 — 회복 중 흔들림 감지)
+      const ks5 = sma(ksClose, REGIME_SMA_FAST);
+      const kq5 = sma(kqClose, REGIME_SMA_FAST);
+      ksUpFast = Number.isFinite(ks5[iKs]) ? ks5[iKs] > ks20[iKs] : null;
+      kqUpFast = Number.isFinite(kq5[iKq]) ? kq5[iKq] > kq20[iKq] : null;
+
+      // 신규: 당일 갭 또는 전일 변화율
+      const todayStr = today.replace(/-/g, ''); // 'YYYYMMDD'
+      if (ksOHLC[iKs].date === todayStr && iKs >= 1) {
+        // 당일 데이터 포함 → 오늘 시가 vs 어제 종가 (장 중 실시간)
+        ksGap = ksOHLC[iKs-1].close > 0 ? (ksOHLC[iKs].open / ksOHLC[iKs-1].close - 1) : 0;
+        kqGap = (kqOHLC[iKq].date === todayStr && iKq >= 1 && kqOHLC[iKq-1].close > 0)
+                ? (kqOHLC[iKq].open / kqOHLC[iKq-1].close - 1) : 0;
+        gapSource = 'today';
+      } else if (iKs >= 1) {
+        // 당일 데이터 없음 (장 전) → 전일 종가 변화율로 대체
+        ksGap = ksOHLC[iKs-1].close > 0 ? (ksOHLC[iKs].close / ksOHLC[iKs-1].close - 1) : 0;
+        kqGap = (iKq >= 1 && kqOHLC[iKq-1].close > 0)
+                ? (kqOHLC[iKq].close / kqOHLC[iKq-1].close - 1) : 0;
+        gapSource = 'yesterday';
+      }
+
+      // ── Regime 레벨 판정 ──
+      if (ks === false || kq === false) {
+        regimeLevel = 2; // 약세: SMA20 < SMA60
+      } else if (ksUpFast === false || kqUpFast === false) {
+        regimeLevel = 1; // 중립: SMA20>SMA60이지만 SMA5<SMA20 (회복 중 흔들림)
+      }
+      // 갭다운/전일급락 오버라이드 → 약세 강제
+      // 당일 갭: -0.7% 기준 / 전일 변화율 fallback: -1.5% 기준 (의미있는 하락 구분)
+      const downThreshold = gapSource === 'today' ? REGIME_GAP_DOWN : REGIME_YEST_DOWN;
+      if (ksGap < downThreshold || kqGap < downThreshold) {
+        regimeLevel = Math.max(regimeLevel, 2);
+      }
+
     } catch (e) {
-      riskOn = true;
+      regimeLevel = 0; // 데이터 오류 시 차단 없이 통과 (보수적 fallback)
     }
-    store.regimeCache = { date: today, riskOn, ksUp: ks, kqUp: kq, at: new Date().toISOString() };
+
+    const riskOn = regimeLevel < 2; // 기존 sizeFactor 호환성 유지
+    store.regimeCache = {
+      date: today, riskOn, regimeLevel,
+      ksUp: ks, kqUp: kq, ksUpFast, kqUpFast,
+      ksGap: (ksGap * 100).toFixed(2) + '%',
+      kqGap: (kqGap * 100).toFixed(2) + '%',
+      gapSource,
+      at: new Date().toISOString(),
+    };
     return store.regimeCache;
   };
 
@@ -400,8 +578,9 @@ const run = async function () {
     try { await http({ method: 'POST', url: 'https://api.telegram.org/bot' + BOT + '/sendMessage', json: true, body: { chat_id: CHAT, text: '⚠️ [설정 필요] HOLIDAYS 배열이 2026년까지만 등록되어 있습니다. swing_scanner_code.js 상단 HOLIDAYS 상수에 2027년 공휴일을 추가해주세요.' } }); } catch(e) {}
   }
 
-  if (h < 9) return [{ json: { skipped: true, reason: 'Before market open' } }];
-  if (h === 9 && m < 30) return [{ json: { skipped: true, reason: 'Too early - daily data not ready before 09:30' } }];
+  if (h < ALERT_START_HOUR || (h === ALERT_START_HOUR && m < ALERT_START_MINUTE)) {
+    return [{ json: { skipped: true, reason: 'Before alert start time (before 09:00 KST)' } }];
+  }
 
   if (h > STOP_NEW_ALERTS_HOUR || (h === STOP_NEW_ALERTS_HOUR && m >= STOP_NEW_ALERTS_MINUTE)) {
     return [{ json: { skipped: true, reason: 'Too close to market close' } }];
@@ -442,6 +621,80 @@ const run = async function () {
   let excludedTheme = 0;
   const riskCacheAt = bl.riskUpdatedAt || null;
   const themeCacheAt = bl.themeUpdatedAt || null;
+
+  // ===== 외국인/기관 순매수 로딩 (KRX MDCSTAT02023, 당일 1회 캐싱) =====
+  let supplyMap = {};
+  const supCacheKey = today.replace(/-/g, '');
+  if (store.supplyCache && store.supplyCache.trdDd === supCacheKey) {
+    supplyMap = store.supplyCache.map || {};
+  } else {
+    try {
+      const supBody = `bld=dbms/MDC/STAT/standard/MDCSTAT02023&mktId=ALL&trdDd=${supCacheKey}&share=1&money=1&csvxls_isNo=false`;
+      const supR = await http({
+        method: 'POST',
+        url: 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': 'https://data.krx.co.kr', 'Referer': 'https://data.krx.co.kr/', 'User-Agent': 'Mozilla/5.0' },
+        body: supBody, json: true,
+      });
+      const supRows = (supR && (supR.output || supR.OutBlock_1 || [])) || [];
+      for (const row of supRows) {
+        const sc = String(row.ISU_SRT_CD || '').trim();
+        if (!sc) continue;
+        const frgn = Number(String(row.FRGN_NETBUY_TRDVAL || '0').replace(/,/g, ''));
+        const org  = Number(String(row.ORG_NETBUY_TRDVAL  || '0').replace(/,/g, ''));
+        supplyMap[sc] = { frgn, org };
+      }
+      store.supplyCache = { trdDd: supCacheKey, map: supplyMap };
+    } catch (e) { /* 수급 로딩 실패 → 해당 필터 스킵, 스캔 계속 */ }
+  }
+  // ===== /외국인/기관 순매수 로딩 =====
+
+  // ===== 프로그램 매매 방향 로딩 (KRX MDCSTAT05401, 당일 1회 캐싱) =====
+  let programNetBuy = null;
+  if (store.programCache && store.programCache.trdDd === supCacheKey) {
+    programNetBuy = store.programCache.netBuy;
+  } else {
+    try {
+      const pgmBody = `bld=dbms/MDC/STAT/standard/MDCSTAT05401&trdDd=${supCacheKey}&csvxls_isNo=false`;
+      const pgmR = await http({
+        method: 'POST',
+        url: 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': 'https://data.krx.co.kr', 'User-Agent': 'Mozilla/5.0' },
+        body: pgmBody, json: true,
+      });
+      const pgmRows = (pgmR && (pgmR.output || pgmR.OutBlock_1 || [])) || [];
+      if (pgmRows.length > 0) {
+        const toNum = (v) => Number(String(v || '0').replace(/,/g, ''));
+        const row = pgmRows[0];
+        const totalBuy  = toNum(row.ARBT_BUY_TRDVAL)  + toNum(row.NABT_BUY_TRDVAL);
+        const totalSell = toNum(row.ARBT_SELL_TRDVAL) + toNum(row.NABT_SELL_TRDVAL);
+        programNetBuy = totalBuy - totalSell;
+      }
+      store.programCache = { trdDd: supCacheKey, netBuy: programNetBuy };
+    } catch (e) { /* 프로그램 로딩 실패 → sizeFactor 미변경 */ }
+  }
+  const pgmCaution = (programNetBuy !== null && programNetBuy < PGM_CAUTION_THRESHOLD);
+  // ===== /프로그램 매매 방향 로딩 =====
+
+  // ===== 당일 공시 목록 로딩 (DART OpenAPI, 당일 1회 캐싱) =====
+  let dartToday = {};
+  if (store.dartCache && store.dartCache.trdDd === supCacheKey) {
+    dartToday = store.dartCache.map || {};
+  } else if (DART_API_KEY) {
+    try {
+      const dartUrl = `https://opendart.fss.or.kr/api/list.json?crtfc_key=${DART_API_KEY}&bgn_de=${supCacheKey}&end_de=${supCacheKey}&page_no=1&page_count=100`;
+      const dartR = await http({ method: 'GET', url: dartUrl, json: true });
+      const dartList = (dartR && dartR.list) || [];
+      for (const item of dartList) {
+        const sc = String(item.stock_code || '').trim();
+        if (!sc) continue;
+        if (!dartToday[sc]) dartToday[sc] = [];
+        dartToday[sc].push(String(item.report_nm || '').slice(0, 40));
+      }
+      store.dartCache = { trdDd: supCacheKey, map: dartToday };
+    } catch (e) { /* DART 로딩 실패 → 공시 필터 스킵 */ }
+  }
+  // ===== /당일 공시 목록 로딩 =====
 
   const to0 = (n) => Math.round(Number(n) || 0).toLocaleString('ko-KR');
   const getCode = (sym) => {
@@ -737,6 +990,9 @@ const run = async function () {
     if (riskSet.has(rc)) { excludedRisk++; continue; }
     if (themeSet.has(rc)) { excludedTheme++; continue; }
 
+    // [QI-1] ETF 유형 필터: 채권혼합·커버드콜·레버리지·인버스 제외 (2026-05-09)
+    if (ETF_EXCLUDE_KEYWORDS.some(kw => nm.includes(kw))) continue;
+
     if (price < MIN_PRICE) continue;
     if (turnover < MIN_INTRADAY_TURNOVER) continue;
 
@@ -986,6 +1242,29 @@ const run = async function () {
 
         if (currentPrice < MIN_PRICE) return;
 
+        // ===== [QI-3] ETF vs 개별주 분류 (2026-05-09) =====
+        const _tickerCode = t.replace(/\.(KS|KQ)$/, '');
+        const _stockName  = NAME[_tickerCode] || _tickerCode;
+        const isETF = isETFName(_stockName);
+        // 개별주 최소 거래대금 (ETF보다 상향): 인버스/레버리지는 이미 QI-1에서 제거됨
+        if (!isETF) {
+          const todayTurnover = currentPrice * (volD[dIdx] || 0);
+          if (todayTurnover < STOCK_MIN_TURNOVER) return;
+        }
+        // ===== /QI-3 =====
+
+        // ===== [GAP-UP-01] 시가 갭 비율 필터 (2026-04-25) =====
+        const openPrice = openD[dIdx]; // 당일 시가 (openD fallback: prevClose)
+        const gapRatio  = prevClose > 0 ? (openPrice / prevClose - 1) : 0;
+        if (gapRatio < GAP_DOWN_BLOCK) return; // 갭다운 -3% 이상 → 당일 단타 불가
+        if (gapRatio > GAP_UP_MAX) return;     // 갭업 +5% 초과 → 추격 진입 위험
+
+        // ===== [LIMIT-01] 상한가 잔여 여력 필터 (2026-04-25) =====
+        const limitUpPrice = prevClose * 1.30; // 한국 시장 상한가 = 전일 종가 × 1.30
+        const limitUpRoom  = limitUpPrice > 0 ? (limitUpPrice - currentPrice) / limitUpPrice : 1;
+        if (limitUpRoom < LIMIT_ROOM_MIN) return; // 여력 5% 미만 → 추격 불가
+        // ===== /신규 필터 =====
+
         // 최소 거래량 체크 (저유동성 제외)
         const avg5Vol = volD.slice(Math.max(0, dIdx - 5), dIdx).reduce((a, b) => a + b, 0) / 5;
         if (avg5Vol < MIN_AVG5_VOLUME) return;
@@ -1003,12 +1282,13 @@ const run = async function () {
         // 급등 후보 판별 플래그 (RSI 예외·정배열 예외에 공통 사용)
         const isSurgeCandidate = dailyChange >= SURGE_DAILY_CHANGE && rvolVal >= SURGE_RVOL_MIN;
 
-        // [2] RSI14 필터 — 급등 후보는 RSI 90까지 허용, 일반은 80 유지
+        // [2] RSI14 필터 — ETF:80 / 개별주:85 / 급등후보:90 (2026-05-09 분기)
         const rsi14Val = calcRSI14(closeD, dIdx);
         if (Number.isFinite(rsi14Val)) {
           if (rsi14Val < RSI_MIN_ENTRY) return; // 모멘텀 부족 차단
           if (isSurgeCandidate && rsi14Val > RSI_SURGE_MAX) return; // 급등 후보: RSI 90 상한
-          if (!isSurgeCandidate && rsi14Val > RSI_MAX_ENTRY) return; // 일반: RSI 80 상한 유지
+          const rsiMax = isETF ? RSI_MAX_ENTRY : STOCK_RSI_MAX; // ETF:80, 개별주:85
+          if (!isSurgeCandidate && rsi14Val > rsiMax) return;
         }
 
         // [DELIST-01] 상장폐지 위험 패턴 차단 (2026-04-19 개선)
@@ -1022,9 +1302,10 @@ const run = async function () {
         const volDropped = prevVol5 > 0 && (recentVol4 / prevVol5) < DELIST_VOL_DROP;
         if (consecDown >= DELIST_CONSEC_DOWN && volDropped) return; // 상장폐지 위험 패턴 차단
 
-        // [3] ADX(14) 추세 강도 필터
+        // [3] ADX(14) 추세 강도 필터 — ETF:20 / 개별주:15 (2026-05-09 분기)
         const adxResult = calcADX(highD, lowD, closeD, dIdx, 14);
-        if (Number.isFinite(adxResult.adx) && adxResult.adx < ADX_TREND_MIN) return; // 횡보장 차단
+        const adxMin = isETF ? ADX_TREND_MIN : STOCK_ADX_MIN; // ETF:20, 개별주:15
+        if (Number.isFinite(adxResult.adx) && adxResult.adx < adxMin) return; // 횡보장 차단
 
         // [4] EMA5/EMA10 계산 (단기 정배열용)
         const ema5 = ema(closeD, 5);
@@ -1049,9 +1330,10 @@ const run = async function () {
         let score = 0;
         const signals = [];
 
-        // 필수 조건: 일봉 정배열 (SMA20 > SMA60) — 급등 후보는 예외 허용
+        // 필수 조건: 일봉 정배열 (SMA20 > SMA60) — 급등후보 또는 개별주 고RSI+고RVOL 예외 (2026-05-09)
         const dailyUptrend = sma20_d[dIdx] > sma60_d[dIdx];
-        if (!dailyUptrend && !isSurgeCandidate) return; // 급등 조건 충족 시 정배열 예외
+        const stockMomentumException = !isETF && rsi14Val >= 70 && rvolVal >= RVOL_GRADE_A; // 개별주 강모멘텀 예외
+        if (!dailyUptrend && !isSurgeCandidate && !stockMomentumException) return;
         if (dailyUptrend) {
           score += 15;
           signals.push('일봉정배열');
@@ -1225,7 +1507,7 @@ const run = async function () {
           }
         }
 
-        if (score < RELAX_SCORE) return;
+        if (score < MIN_SCORE_V2) return;
 
         // 등급 판정 (기술 점수 기반 5단계 분류)
         // 강매:   score≥120 → 고강도 기술 신호 (5거래일 보유)
@@ -1258,6 +1540,52 @@ const run = async function () {
         const macdNegativeTrend = Number.isFinite(macdResult.hist) && macdResult.hist < 0
                                 && Number.isFinite(macdResult.histPrev) && macdResult.histPrev < 0;
         if (macdNegativeTrend && grade !== '강매') return; // 하락 모멘텀 종목 차단 (강매는 예외)
+
+        // ===== [B-1] 시가 갭업 보너스 (2026-04-25) =====
+        if (gapRatio >= GAP_UP_MIN && gapRatio <= GAP_UP_MAX) {
+          score += GAP_UP_SCORE;
+          signals.push('갭업출발(' + pct(gapRatio) + ')');
+        }
+
+        // ===== [B-2] 상한가 잔여 여력 보너스 (2026-04-25) =====
+        if (limitUpRoom >= LIMIT_ROOM_LOW && limitUpRoom <= LIMIT_ROOM_HIGH) {
+          score += LIMIT_ROOM_SCORE;
+          signals.push('상한가여력(' + Math.round(limitUpRoom * 100) + '%)');
+        }
+
+        // ===== [B-3] 외국인/기관 순매수 수급 (2026-04-25) =====
+        const supCode = normalize(getCode(t));
+        const sup = supplyMap[supCode] || {};
+        const frgnNet = sup.frgn || 0;
+        const orgNet  = sup.org  || 0;
+        if (frgnNet < -SUP_NETBUY_MIN || orgNet < -SUP_NETBUY_MIN) return; // 대량 순매도 차단
+        if (frgnNet > SUP_NETBUY_MIN && orgNet > SUP_NETBUY_MIN) {
+          score += SUP_DUAL_SCORE;
+          signals.push('외국인+기관동반순매수');
+        } else if (frgnNet > SUP_NETBUY_MIN) {
+          score += SUP_SINGLE_SCORE_FRGN;
+          signals.push('외국인순매수');
+        } else if (orgNet > SUP_NETBUY_MIN) {
+          score += SUP_SINGLE_SCORE_ORG;
+          signals.push('기관순매수');
+        }
+
+        // ===== [B-5] 당일 공시 필터 및 보너스 (2026-04-25) =====
+        const dartItems = dartToday[supCode] || [];
+        if (dartItems.length > 0) {
+          const reportNames = dartItems.join(' ');
+          const isNegative = /소송|횡령|배임|감사의견|불성실|조회/.test(reportNames);
+          const isPositive = /계약체결|특허|인허가|수주|투자유치|증자/.test(reportNames);
+          if (isNegative) return; // 부정 공시 즉시 차단
+          if (isPositive) {
+            score += DART_POSITIVE_SCORE;
+            signals.push('긍정공시(' + dartItems[0].slice(0, 12) + ')');
+          } else {
+            score += DART_MINOR_SCORE;
+            signals.push('당일공시');
+          }
+        }
+
         // 요일별 rankScore 보정 (d = kst.getUTCDay(), 상단에서 선언됨)
         const dowAdj = (d === 4) ? DOW_BONUS_THU     // 목요일 +3
                      : (d === 3) ? DOW_BONUS_WED     // 수요일 +2
@@ -1288,20 +1616,55 @@ const run = async function () {
         const target1 = target1Raw < target ? target1Raw : null;
 
         const rg = await getMarketRegime(store, today);
-        const riskOn = !!(rg && rg.riskOn);
-        const sizeFactor = riskOn ? 1.0 : 0.5;
+        const riskOn      = !!(rg && rg.riskOn);
+        const regimeLevel = rg?.regimeLevel ?? 0;
+
+        // [REGIME-FIX] 시장 단계별 진입 차단 (2026-05-02)
+        if (regimeLevel >= 2 && grade !== '강매') return; // 약세장: 강매(score≥120) 전용
+        if (regimeLevel >= 1 && grade === '매도차익') return; // 중립장: 매도차익 차단
+        // [SURGE-FILTER] 전일 급등 종목 진입 억제 (2026-05-02)
+        if (dailyChange > MAX_ENTRY_SURGE_PCT) return; // +10% 초과: 절대 차단
+        if (dailyChange > SURGE_ZONE_PCT && score < SURGE_ZONE_MIN_SCORE) return; // +8%+: 점수 270 미만 차단
+
+        // [REGIME-LOG] 매일 1회 시장 Regime 상태 Telegram 알림
+        if (!store.regimeLogSent || store.regimeLogSent !== today) {
+          store.regimeLogSent = today;
+          const levelLabel = ['✅ 강세(0) — 전 등급 허용', '⚡ 중립(1) — 매도차익 차단', '⚠️ 약세(2) — 강매 전용'][regimeLevel] || String(regimeLevel);
+          const regimeMsg =
+            '📊 [시장 Regime] ' + today + NL +
+            '수준: ' + levelLabel + NL +
+            'KOSPI SMA20>SMA60: ' + (rg.ksUp === null ? 'N/A' : (rg.ksUp ? '✅' : '❌')) + NL +
+            'KOSPI SMA5>SMA20:  ' + (rg.ksUpFast === null ? 'N/A' : (rg.ksUpFast ? '✅' : '❌')) + NL +
+            'KOSPI 갭/전일변화: ' + (rg.ksGap || 'N/A') + ' (' + (rg.gapSource || '?') + ')' + NL +
+            'KOSDAQ SMA20>SMA60: ' + (rg.kqUp === null ? 'N/A' : (rg.kqUp ? '✅' : '❌')) + NL +
+            'KOSDAQ SMA5>SMA20:  ' + (rg.kqUpFast === null ? 'N/A' : (rg.kqUpFast ? '✅' : '❌')) + NL +
+            'KOSDAQ 갭/전일변화: ' + (rg.kqGap || 'N/A');
+          try {
+            await http({ method: 'POST', url: 'https://api.telegram.org/bot' + BOT + '/sendMessage',
+              json: true, body: { chat_id: CHAT, text: regimeMsg } });
+          } catch(e) { /* 로그 발송 실패는 무시 */ }
+        }
+
+        // [B-4] 프로그램 대량 순매도 시 사이징 감소 (2026-04-25)
+        const sizeFactor = riskOn
+          ? (pgmCaution ? 0.5  : 1.0)
+          : (pgmCaution ? 0.25 : 0.5);
         const qty = calcQty(ACCOUNT_KRW, RISK_PCT_PER_TRADE * sizeFactor, currentPrice, stop);
 
         const code = normalize(getCode(t));
         const name = NAME[code] || code;
         const mkt = t.endsWith('.KS') ? 'KOSPI' : 'KOSDAQ';
 
+        // [QI-3] ETF rankScore 패널티 — 개별주와 공정 경쟁 (2026-05-09)
+        const finalRankScore = isETF ? rankScore - ETF_SCORE_PENALTY : rankScore;
+
         candidates.push({
           ticker: t, code, name, market: mkt,
           entry: currentPrice, target, target1, stop,
           score, signals, dailyChange, currentPrice, prevClose,
           timeStr: timeStrNow, type: '스윙',
-          rankScore, atrAbs, rvolVal, riskOn, qty, strictPass, relaxedPass, grade,
+          rankScore: finalRankScore, atrAbs, rvolVal, riskOn, qty, strictPass, relaxedPass, grade,
+          isETF,
         });
 
         // Log grade assignment for QA tracing
@@ -1388,11 +1751,72 @@ const run = async function () {
     candidates.sort((a, b) => (b.rankScore || b.score) - (a.rankScore || a.score));
   }
 
-  // 단기 고수익 등급만 선발 — 강매/급등/매도차익 3등급 한정, filler 없음
+  // ===== [QI-5] 당일 손절 카운터 체크 (2026-05-09) =====
+  // 이미 당일 손절 신호가 INTRADAY_STOP_THRESH회 이상이면 신규 발송 억제
+  if (!store.intradayStopCount) store.intradayStopCount = {};
+  if (!store.intradayStopCount[today]) store.intradayStopCount[today] = 0;
+  // 당일 매수 미도달 포함 빠른 손절 패턴: 이미 발송된 종목 중 당일 손절 확인 (weeklyRecommendations 활용)
+  // 손절 카운터는 weekly_reporter가 갱신하며, 스캐너는 읽기만 함
+  if (store.intradayStopCount[today] >= INTRADAY_STOP_THRESH) {
+    logger.info('Intraday stop threshold reached, suppressing new sends', {
+      today, stopCount: store.intradayStopCount[today]
+    }, requestId);
+    return [{ json: { skipped: true, reason: 'Intraday stop threshold', stopCount: store.intradayStopCount[today] } }];
+  }
+  // ===== /QI-5 =====
+
+  // ===== [QI-6] 주간 추천 한도 체크 (2026-05-09) =====
+  const _weekDatesForLimit = (() => {
+    const dates = [];
+    const ref = new Date(today + 'T00:00:00Z');
+    const dow = ref.getUTCDay();
+    const daysToMon = dow === 0 ? 6 : dow - 1;
+    const mon = new Date(ref.getTime() - daysToMon * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 7; i++) {
+      const cur = new Date(mon.getTime() + i * 24 * 60 * 60 * 1000);
+      const ds = cur.toISOString().slice(0, 10);
+      if (cur.getUTCDay() >= 1 && cur.getUTCDay() <= 5 && !HOLIDAYS.includes(ds)) dates.push(ds);
+    }
+    return dates;
+  })();
+  const thisWeekSendCount = _weekDatesForLimit.reduce(
+    (sum, d) => sum + ((store.weeklyRecommendations[d] || []).length), 0
+  );
+  if (thisWeekSendCount >= MAX_WEEKLY_SENDS) {
+    return [{ json: { skipped: true, reason: 'Weekly send limit reached', weeklyCount: thisWeekSendCount } }];
+  }
+  const remainingSlots = MAX_WEEKLY_SENDS - thisWeekSendCount;
+  // ===== /QI-6 =====
+
+  // ===== [QI-2] 상관관계 중복 차단 — 이번 주 발송 기록 수집 (2026-05-09) =====
+  const thisWeekRecs = _weekDatesForLimit.flatMap(d => store.weeklyRecommendations[d] || []);
+  // ===== /QI-2 =====
+
+  // 단기 고수익 등급만 선발 — 강매/급등/매도차익 3등급 한정, ETF/개별주 분리 (2026-05-09)
   const FAST_GRADES = new Set(['강매', '급등', '매도차익']);
-  const selected = candidates
-    .filter((c) => FAST_GRADES.has(c.grade))
-    .slice(0, MAX_INTRADAY_SENDS);
+  const qualifiedCandidates = candidates.filter((c) => FAST_GRADES.has(c.grade));
+
+  // [QI-2+3] ETF/개별주 분리 선발: 각 버킷에서 상관관계 차단 후 상위 1건씩
+  const etfCandidates  = qualifiedCandidates.filter(c => c.isETF);
+  const stockCandidates = qualifiedCandidates.filter(c => !c.isETF);
+
+  const pickBest = (pool, maxPicks) => {
+    const picked = [];
+    for (const c of pool) {
+      if (picked.length >= maxPicks) break;
+      // [QI-2] 상관관계 중복 차단: 이번 주 + 이미 picked 내 상관 종목 제외
+      const alreadySent = [...thisWeekRecs, ...picked];
+      if (isCorrelationDuplicate(c.name, alreadySent)) continue;
+      picked.push(c);
+    }
+    return picked;
+  };
+
+  const etfSlots   = Math.min(MAX_ETF_PER_SEND,   Math.floor(remainingSlots / 2) || 1);
+  const stockSlots = Math.min(MAX_STOCK_PER_SEND,  remainingSlots - etfSlots);
+  const selectedETF   = pickBest(etfCandidates,   etfSlots);
+  const selectedStock = pickBest(stockCandidates, stockSlots);
+  const selected = [...selectedETF, ...selectedStock].slice(0, remainingSlots);
   // MIN_DAILY_PICKS=0: 0건이면 알림 없이 정상 종료
 
   const sent = [];
@@ -1431,6 +1855,14 @@ const run = async function () {
 
     const dailyChangeText = Number.isFinite(c.dailyChange) ? ' (전일 대비 ' + pct(c.dailyChange) + ')' : '';
 
+    const alertH = kstNow.getUTCHours();
+    const alertM = kstNow.getUTCMinutes();
+    const isOpenWindow = (alertH === 9 && alertM <= 10);
+    const entryNote = isOpenWindow
+      ? '09:00~09:10 시초가 체결 확인 후 진입'
+      : timeStr + ' 현재가 기준 즉시 진입';
+
+    const typeLabel = c.isETF ? 'ETF' : '단일종목';
     const gradePrefix = (c.grade === '강매')     ? '[★강매] '
                       : (c.grade === '급등')     ? '[🚀급등] '
                       : (c.grade === '매도차익') ? '[⚡단기] '
@@ -1439,14 +1871,17 @@ const run = async function () {
     const target1Line = Number.isFinite(c.target1)
       ? '- 1차 목표: ' + to0(c.target1) + '원 (+' + pct(c.target1 / c.entry - 1) + ')' + NL
       : '';
+    const pgmWarningLine = pgmCaution ? '⚠️ 프로그램 순매도 과다 — 반절매 주의' + NL : '';
     const msg =
-      gradePrefix + '[스윙 포착] ' + c.market + ' | ' + displayName + '(' + c.code + ')' + NL +
+      gradePrefix + '[당일단타] ' + c.market + '(' + typeLabel + ') | ' + displayName + '(' + c.code + ')' + NL +
       '등급: ' + (c.grade || '매수') + NL +
       '기준가: ' + to0(c.entry) + '원' + dailyChangeText + NL +
-      '- 매수가: ' + to0(c.entry) + '원 (전일종가 기준, 시초가 확인 필수)' + NL +
+      '- 매수가: ' + to0(c.entry) + '원 (' + entryNote + ')' + NL +
+      '- 청산 목표: 당일 장마감 전 (최대 익일 오전)' + NL +
       target1Line +
       '- 최종 목표: ' + to0(c.target) + '원 (+' + pct(c.target / c.entry - 1) + ')' + NL +
       '- 손절가: ' + to0(c.stop) + '원 (-' + pct(1 - c.stop / c.entry) + ')' + NL +
+      pgmWarningLine +
       'ATR(14): ' + (Number.isFinite(c.atrAbs) ? (to0(c.atrAbs) + '원') : 'N/A') + NL +
       '- 점수: ' + c.score + '점' + NL +
       '핵심 시그널: ' + (c.signals.slice(0, 3).join(', ') || 'N/A');
@@ -1490,10 +1925,10 @@ const run = async function () {
       if (!store.weeklyRecommendations) store.weeklyRecommendations = {};
       if (!store.weeklyRecommendations[today2]) store.weeklyRecommendations[today2] = [];
 
-      // 보유 기간 동적 계산 (강매→5일, 급등→3일, 매도차익→3일) (2026-04-18 개선: 급등·매도차익 2→3)
-      const holdDays = (selected[i].grade === '강매')     ? HOLD_STRONG     // 5거래일
-                     : (selected[i].grade === '급등')     ? HOLD_SURGE      // 3거래일
-                     : (selected[i].grade === '매도차익') ? HOLD_SHORTTRADE // 3거래일
+      // 보유 기간: 당일단타 전략으로 전 등급 1거래일
+      const holdDays = (selected[i].grade === '강매')     ? HOLD_STRONG     // 1거래일
+                     : (selected[i].grade === '급등')     ? HOLD_SURGE      // 1거래일
+                     : (selected[i].grade === '매도차익') ? HOLD_SHORTTRADE // 1거래일
                      : HOLD_WEAK;
 
       store.weeklyRecommendations[today2].push({
@@ -1502,6 +1937,7 @@ const run = async function () {
         entry: res.entry, target: res.target, target1: res.target1, stop: res.stop,
         atrAbs: selected[i].atrAbs,
         holdingDays: holdDays, score: selected[i].score, grade: selected[i].grade,
+        isETF: !!selected[i].isETF, // [QI] ETF vs 단일종목 구분 태그
       });
 
       sent.push(selected[i].ticker);

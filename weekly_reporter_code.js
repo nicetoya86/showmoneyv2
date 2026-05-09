@@ -298,7 +298,8 @@ const run = async function () {
     msg += NL + '✅ 수익 (' + winList.length + '건)' + NL;
     for (const d of winList) {
       const name = resolveName(d);
-      let line = name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
+      const typeTag = d.isETF === false ? '[단일종목]' : d.isETF ? '[ETF]' : '';
+      let line = typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
       if (d.hitTargetDay) line += ' │ ' + shortDate(d.hitTargetDay);
       if (d.score) line += ' │ ' + d.score + '점';
@@ -339,22 +340,74 @@ const run = async function () {
     msg += NL + '❌ 손절 (' + lossList.length + '건)' + NL;
     for (const d of lossList) {
       const name = resolveName(d);
-      let line = name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
+      const typeTag = d.isETF === false ? '[단일종목]' : d.isETF ? '[ETF]' : '';
+      let line = typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
       if (d.hitStopDay) line += ' │ 손절 ' + shortDate(d.hitStopDay);
       if (d.score) line += ' │ ' + d.score + '점';
       msg += line + NL;
     }
+    // [QI-5] 손절 카운터 갱신 — 당일 손절 카운트를 store에 기록
+    // (스캐너가 다음 실행 시 이 값을 읽어 당일 발송 억제 여부 결정)
+    try {
+      if (!store.intradayStopCount) store.intradayStopCount = {};
+      for (const d of lossList) {
+        const stopDay = d.hitStopDay || d.date;
+        if (!store.intradayStopCount[stopDay]) store.intradayStopCount[stopDay] = 0;
+        store.intradayStopCount[stopDay]++;
+      }
+    } catch(e) {}
   }
 
-  // 매수 미진입 종목
+  // 매수 미진입 종목 + [QI-4] 미도달 이후 추적 (2026-05-09)
   const notEnteredList = details.filter((d) => d.result === 'not_entered');
+  const missedOpportunities = []; // 미도달 후 상승 종목
   if (notEnteredList.length > 0) {
+    // 미도달 종목의 이후 3거래일 가격 추적
+    for (const d of notEnteredList) {
+      try {
+        const trackEnd = addTradingDays(d.date, 3);
+        const trackEndCheck = trackEnd <= today ? trackEnd : prevTradingDay;
+        const startStr = addTradingDays(d.date, 1).replace(/-/g, '');
+        const endStr = trackEndCheck.replace(/-/g, '');
+        if (startStr > endStr) continue;
+        const trackData = await fetchNaverDaily(d.code, startStr, endStr);
+        await sleep(300);
+        if (!trackData || trackData.length === 0) continue;
+        const postHigh = Math.max(...trackData.map(r => Number(r.highPrice) || 0));
+        const postLow  = Math.min(...trackData.map(r => Number(r.lowPrice) || Infinity));
+        const postReturn = d.entry > 0 ? (postHigh - d.entry) / d.entry : 0;
+        // 미도달 후 3일 이내 +3% 이상 상승 → 기회 손실로 분류
+        if (postReturn >= 0.03) {
+          missedOpportunities.push({ ...d, postReturn, postHigh });
+        }
+      } catch(e) { /* 추적 실패 무시 */ }
+    }
+
     msg += NL + '⚪ 매수 미도달 (' + notEnteredList.length + '건)' + NL;
     for (const d of notEnteredList) {
       const name = resolveName(d);
       msg += name + '(' + (d.code || '') + ') │ ' + shortDate(d.date) + NL;
     }
+  }
+
+  // [QI-4] 미도달 후 상승 섹션 — 진입가 재검토 시그널
+  if (missedOpportunities.length > 0) {
+    msg += NL + '⚡ 미도달 후 상승 (진입가 재검토 권장)' + NL;
+    for (const d of missedOpportunities) {
+      const name = resolveName(d);
+      msg += name + '(' + (d.code || '') + ') │ ' + shortDate(d.date) + ' │ 이후최고 +' + (d.postReturn * 100).toFixed(1) + '%' + NL;
+    }
+    // 미도달+이후상승 건수를 store에 누적 (3주 연속 발생 시 경고)
+    try {
+      if (!store.missedEntryHistory) store.missedEntryHistory = [];
+      store.missedEntryHistory.push({ week: weekDates[0], count: missedOpportunities.length });
+      store.missedEntryHistory = store.missedEntryHistory.slice(-6); // 최근 6주만 보관
+      const recentHighMiss = store.missedEntryHistory.slice(-3).filter(h => h.count >= 2).length;
+      if (recentHighMiss >= 3) {
+        msg += '⚠️ 3주 연속 미도달+상승 다수 — 진입가를 시가(오픈가) 기준으로 전환 검토 필요' + NL;
+      }
+    } catch(e) {}
   }
 
   msg += NL + '⚠️ 본 리포트는 참고용이며 투자 결과에 책임지지 않습니다.';
