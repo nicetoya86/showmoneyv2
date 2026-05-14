@@ -1,0 +1,1 @@
+- [swing-macd-rsi-risk-filter Feature](project_swing_macd_rsi_risk_filter.md) — PDCA completion report: 100% Match Rate, critical Logger bug fixed during Do phase

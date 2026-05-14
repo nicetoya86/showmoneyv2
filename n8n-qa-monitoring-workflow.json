@@ -1,0 +1,178 @@
+{
+  "version": "1.0",
+  "name": "showmoneyv2 - Zero Script QA Monitoring",
+  "description": "Real-time QA monitoring for trading system using JSON logs",
+  "createdAt": "2026-05-07T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "qa-monitor-start",
+      "type": "n8n-nodes-base.trigger",
+      "typeVersion": 1,
+      "position": [50, 100],
+      "parameters": {
+        "triggerType": "interval",
+        "unit": "minutes",
+        "value": 1
+      },
+      "name": "QA Monitor - Check Logs"
+    },
+    {
+      "id": "read-recent-logs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [300, 100],
+      "parameters": {
+        "functionCode": "const fs = require('fs');\nconst path = require('path');\n\n// Read last 1 minute of logs\nconst logsDir = '/path/to/logs';\nconst now = new Date();\nconst oneMinuteAgo = new Date(now.getTime() - 60000);\n\nlet recentLogs = [];\nconst files = fs.readdirSync(logsDir);\n\nfiles.forEach(file => {\n  const filePath = path.join(logsDir, file);\n  const content = fs.readFileSync(filePath, 'utf8').split('\\n');\n  \n  content.forEach(line => {\n    if (!line.trim()) return;\n    try {\n      const log = JSON.parse(line);\n      const logTime = new Date(log.timestamp);\n      if (logTime >= oneMinuteAgo && logTime <= now) {\n        recentLogs.push(log);\n      }\n    } catch (e) {\n      // Skip invalid JSON\n    }\n  });\n});\n\nreturn [{ json: { logs: recentLogs, count: recentLogs.length } }];"
+      },
+      "name": "Read Recent Logs"
+    },
+    {
+      "id": "detect-errors",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [550, 50],
+      "parameters": {
+        "functionCode": "const logs = $node['Read Recent Logs'].json.logs;\nconst errors = logs.filter(log => log.level === 'ERROR');\n\nreturn [{\n  json: {\n    errors: errors,\n    error_count: errors.length,\n    has_errors: errors.length > 0\n  }\n}];"
+      },
+      "name": "Detect Errors"
+    },
+    {
+      "id": "detect-slow-operations",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [550, 150],
+      "parameters": {
+        "functionCode": "const logs = $node['Read Recent Logs'].json.logs;\nconst slowOps = logs.filter(log => \n  log.data && log.data.duration_ms > 1000\n);\n\n// Group by message\nconst grouped = {};\nslowOps.forEach(log => {\n  if (!grouped[log.message]) {\n    grouped[log.message] = [];\n  }\n  grouped[log.message].push(log);\n});\n\nreturn [{\n  json: {\n    slow_operations: slowOps,\n    slow_count: slowOps.length,\n    grouped_by_type: grouped,\n    has_slow_ops: slowOps.length > 0\n  }\n}];"
+      },
+      "name": "Detect Slow Operations"
+    },
+    {
+      "id": "check-grade-distribution",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [550, 250],
+      "parameters": {
+        "functionCode": "const logs = $node['Read Recent Logs'].json.logs;\nconst grades = {};\nlet totalGrades = 0;\n\nlogs.forEach(log => {\n  if (log.message === 'Grade calculated' && log.data && log.data.grade) {\n    const grade = log.data.grade;\n    grades[grade] = (grades[grade] || 0) + 1;\n    totalGrades++;\n  }\n});\n\nconst distribution = {};\nObject.keys(grades).forEach(grade => {\n  distribution[grade] = {\n    count: grades[grade],\n    percentage: ((grades[grade] / totalGrades) * 100).toFixed(2)\n  };\n});\n\nreturn [{\n  json: {\n    grade_distribution: distribution,\n    total_grades: totalGrades,\n    expected_range: {\n      '강매': '5-10%',\n      '급등': '10-15%',\n      '매도차익': '20-30%',\n      '기타': '50-70%'\n    }\n  }\n}];"
+      },
+      "name": "Check Grade Distribution"
+    },
+    {
+      "id": "verify-request-id",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [550, 350],
+      "parameters": {
+        "functionCode": "const logs = $node['Read Recent Logs'].json.logs;\nconst requestIds = {};\n\nlogs.forEach(log => {\n  const rid = log.request_id;\n  if (!requestIds[rid]) {\n    requestIds[rid] = [];\n  }\n  requestIds[rid].push({\n    timestamp: log.timestamp,\n    service: log.service,\n    message: log.message\n  });\n});\n\nconst flows = {};\nObject.keys(requestIds).forEach(rid => {\n  flows[rid] = {\n    steps: requestIds[rid].length,\n    services: [...new Set(requestIds[rid].map(s => s.service))],\n    sequence: requestIds[rid].map(s => s.message)\n  };\n});\n\nreturn [{\n  json: {\n    request_flows: flows,\n    total_flows: Object.keys(flows).length,\n    trace_valid: Object.keys(flows).every(rid => \n      flows[rid].services.length > 0\n    )\n  }\n}];"
+      },
+      "name": "Verify Request ID Propagation"
+    },
+    {
+      "id": "compile-qa-report",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [800, 150],
+      "parameters": {
+        "functionCode": "const errors = $node['Detect Errors'].json;\nconst slowOps = $node['Detect Slow Operations'].json;\nconst grades = $node['Check Grade Distribution'].json;\nconst flows = $node['Verify Request ID Propagation'].json;\nconst logs = $node['Read Recent Logs'].json.logs;\n\nconst status = {\n  timestamp: new Date().toISOString(),\n  summary: {\n    total_logs: logs.length,\n    errors: errors.error_count,\n    slow_operations: slowOps.slow_count,\n    request_flows: flows.total_flows,\n    trace_valid: flows.trace_valid\n  },\n  alerts: [],\n  recommendations: []\n};\n\n// Check for alerts\nif (errors.error_count > 0) {\n  status.alerts.push({\n    severity: 'CRITICAL',\n    type: 'ERRORS_DETECTED',\n    count: errors.error_count,\n    details: errors.errors.slice(0, 3) // First 3 errors\n  });\n}\n\nif (slowOps.slow_count > 3) {\n  status.alerts.push({\n    severity: 'WARNING',\n    type: 'SLOW_OPERATIONS',\n    count: slowOps.slow_count,\n    avg_duration: Math.round(\n      slowOps.slow_operations.reduce((sum, op) => sum + op.data.duration_ms, 0) / slowOps.slow_count\n    )\n  });\n}\n\nif (!flows.trace_valid) {\n  status.alerts.push({\n    severity: 'WARNING',\n    type: 'REQUEST_TRACE_ISSUE',\n    message: 'Some request flows may be incomplete'\n  });\n}\n\n// Recommendations\nif (errors.error_count === 0) {\n  status.recommendations.push('✓ No errors detected');\n} else {\n  status.recommendations.push('Review and fix detected errors');\n}\n\nif (slowOps.slow_count < 3) {\n  status.recommendations.push('✓ Performance within acceptable range');\n} else {\n  status.recommendations.push('Investigate slow operations for optimization');\n}\n\nstatus.recommendations.push(`Grade distribution tracked: ${Object.keys(grades.grade_distribution).length} types`);\nstatus.recommendations.push(`Request tracing: ${flows.total_flows} flows verified`);\n\nreturn [{ json: status }];"
+      },
+      "name": "Compile QA Report"
+    },
+    {
+      "id": "send-alert-email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [1050, 50],
+      "parameters": {
+        "sendGridApiKey": "${SENDGRID_API_KEY}",
+        "toEmail": "nicetoya@fastlane.kr",
+        "subject": "showmoneyv2 QA Alert: Errors Detected",
+        "textContent": "Errors detected in trading system logs.\nCheck dashboard for details."
+      },
+      "whenNode": "on_error"
+    },
+    {
+      "id": "log-qa-results",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1050, 150],
+      "parameters": {
+        "functionCode": "const report = $node['Compile QA Report'].json;\nconst fs = require('fs');\nconst path = require('path');\n\nconst qaLogsDir = '/path/to/qa-logs';\nif (!fs.existsSync(qaLogsDir)) {\n  fs.mkdirSync(qaLogsDir, { recursive: true });\n}\n\nconst date = new Date().toISOString().split('T')[0];\nconst time = new Date().toISOString().split('T')[1].split('.')[0].replace(/:/g, '');\nconst filename = `qa-report-${date}_${time}.json`;\nconst filepath = path.join(qaLogsDir, filename);\n\nfs.writeFileSync(filepath, JSON.stringify(report, null, 2));\n\nreturn [{\n  json: {\n    logged: true,\n    file: filename,\n    summary: report.summary,\n    alerts_count: report.alerts.length\n  }\n}];"
+      },
+      "name": "Log QA Results"
+    },
+    {
+      "id": "notify-if-errors",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "parameters": {
+        "conditions": {
+          "options": [
+            {
+              "condition": "&&",\n              "value1": "{{ $node['Compile QA Report'].json.summary.errors }}",
+              "operation": ">",
+              "value2": "0"
+            }
+          ]
+        }
+      },
+      "name": "Check for Errors"
+    },
+    {
+      "id": "send-telegram-alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1300, 250],
+      "parameters": {
+        "botToken": "${TELEGRAM_BOT_TOKEN}",
+        "chatId": "${TELEGRAM_CHAT_ID}",
+        "messageType": "text",
+        "text": "QA ALERT: {{ $node['Compile QA Report'].json.summary.errors }} errors detected\\nCheck logs immediately: {{ $node['Log QA Results'].json.file }}"
+      },
+      "whenNode": "notify-if-errors"
+    },
+    {
+      "id": "daily-summary",
+      "type": "n8n-nodes-base.trigger",
+      "typeVersion": 1,
+      "position": [50, 500],
+      "parameters": {
+        "triggerType": "cron",
+        "cronExpression": "0 18 * * *"
+      },
+      "name": "Daily Summary (6 PM KST)"
+    },
+    {
+      "id": "aggregate-daily-metrics",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [300, 500],
+      "parameters": {
+        "functionCode": "const fs = require('fs');\nconst path = require('path');\n\nconst logsDir = '/path/to/logs';\nconst date = new Date().toISOString().split('T')[0];\n\nlet dailyStats = {\n  date: date,\n  total_logs: 0,\n  errors: 0,\n  warnings: 0,\n  info: 0,\n  debug: 0,\n  slow_operations: 0,\n  avg_duration_ms: 0,\n  grade_distribution: {},\n  services: {},\n  error_details: []\n};\n\nconst files = fs.readdirSync(logsDir);\nlet totalDuration = 0;\nlet durationCount = 0;\n\nfiles.forEach(file => {\n  if (!file.includes(date)) return;\n  \n  const filePath = path.join(logsDir, file);\n  const content = fs.readFileSync(filePath, 'utf8').split('\\n');\n  \n  content.forEach(line => {\n    if (!line.trim()) return;\n    try {\n      const log = JSON.parse(line);\n      dailyStats.total_logs++;\n      \n      // Count by level\n      if (log.level === 'ERROR') dailyStats.errors++;\n      else if (log.level === 'WARNING') dailyStats.warnings++;\n      else if (log.level === 'INFO') dailyStats.info++;\n      else if (log.level === 'DEBUG') dailyStats.debug++;\n      \n      // Slow operations\n      if (log.data && log.data.duration_ms > 1000) {\n        dailyStats.slow_operations++;\n      }\n      \n      // Duration tracking\n      if (log.data && log.data.duration_ms) {\n        totalDuration += log.data.duration_ms;\n        durationCount++;\n      }\n      \n      // Grade distribution\n      if (log.message === 'Grade calculated' && log.data && log.data.grade) {\n        dailyStats.grade_distribution[log.data.grade] = \n          (dailyStats.grade_distribution[log.data.grade] || 0) + 1;\n      }\n      \n      // Service stats\n      if (!dailyStats.services[log.service]) {\n        dailyStats.services[log.service] = 0;\n      }\n      dailyStats.services[log.service]++;\n      \n      // Error details (first 10)\n      if (log.level === 'ERROR' && dailyStats.error_details.length < 10) {\n        dailyStats.error_details.push({\n          timestamp: log.timestamp,\n          message: log.message,\n          request_id: log.request_id\n        });\n      }\n    } catch (e) {\n      // Skip invalid JSON\n    }\n  });\n});\n\nif (durationCount > 0) {\n  dailyStats.avg_duration_ms = (totalDuration / durationCount).toFixed(2);\n}\n\nreturn [{ json: dailyStats }];"
+      },
+      "name": "Aggregate Daily Metrics"
+    },
+    {
+      "id": "send-daily-report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [550, 500],
+      "parameters": {
+        "botToken": "${TELEGRAM_BOT_TOKEN}",
+        "chatId": "${TELEGRAM_CHAT_ID}",
+        "messageType": "text",
+        "text": "📊 Daily QA Report ({{ $node['Aggregate Daily Metrics'].json.date }})\n\n📈 Summary:\n• Total Logs: {{ $node['Aggregate Daily Metrics'].json.total_logs }}\n• Errors: {{ $node['Aggregate Daily Metrics'].json.errors }}\n• Warnings: {{ $node['Aggregate Daily Metrics'].json.warnings }}\n• Slow Ops: {{ $node['Aggregate Daily Metrics'].json.slow_operations }}\n• Avg Duration: {{ $node['Aggregate Daily Metrics'].json.avg_duration_ms }}ms\n\n🎯 Grades:\n{{ Object.entries($node['Aggregate Daily Metrics'].json.grade_distribution).map(([k, v]) => `${k}: ${v}`).join('\\n') }}\n\n✅ Status: {{ $node['Aggregate Daily Metrics'].json.errors === 0 ? 'HEALTHY' : 'ISSUES FOUND' }}"
+      }
+    },
+    {
+      "id": "create-qa-issue",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1300, 100],
+      "parameters": {
+        "functionCode": "const report = $node['Compile QA Report'].json;\nconst errors = $node['Detect Errors'].json.errors;\n\nif (errors.length === 0) {\n  return [{ json: { created: false, reason: 'No errors to report' } }];\n}\n\nconst issueDate = new Date().toISOString().split('T')[0];\nconst firstError = errors[0];\n\nconst issue = {\n  id: `ISSUE-${Date.now()}`,\n  date: issueDate,\n  title: `${firstError.message} - ${firstError.service}`,\n  severity: 'CRITICAL',\n  request_id: firstError.request_id,\n  service: firstError.service,\n  error_count: errors.length,\n  first_error: firstError,\n  summary: `${errors.length} error(s) detected in ${firstError.service}`,\n  status: 'NEW'\n};\n\nreturn [{ json: issue }];"
+      },
+      "name": "Create QA Issue"
+    }
+  ],
+  "connections": {
+    "qa-monitor-start": [\n      { \"node\": \"read-recent-logs\", \"type\": \"main\" }\n    ],\n    "read-recent-logs": [\n      { \"node\": \"detect-errors\", \"type\": \"main\" },\n      { \"node\": \"detect-slow-operations\", \"type\": \"main\" },\n      { \"node\": \"check-grade-distribution\", \"type\": \"main\" },\n      { \"node\": \"verify-request-id\", \"type\": \"main\" }\n    ],\n    "detect-errors": [\n      { \"node\": \"compile-qa-report\", \"type\": \"main\" }\n    ],\n    "detect-slow-operations": [\n      { \"node\": \"compile-qa-report\", \"type\": \"main\" }\n    ],\n    "check-grade-distribution": [\n      { \"node\": \"compile-qa-report\", \"type\": \"main\" }\n    ],\n    "verify-request-id": [\n      { \"node\": \"compile-qa-report\", \"type\": \"main\" }\n    ],\n    "compile-qa-report": [\n      { \"node\": \"log-qa-results\", \"type\": \"main\" },\n      { \"node\": \"notify-if-errors\", \"type\": \"main\" },\n      { \"node\": \"create-qa-issue\", \"type\": \"main\" }\n    ],\n    "notify-if-errors": [\n      { \"node\": \"send-telegram-alert\", \"type\": \"true\" }\n    ],\n    \"daily-summary\": [\n      { \"node\": \"aggregate-daily-metrics\", \"type\": \"main\" }\n    ],\n    \"aggregate-daily-metrics\": [\n      { \"node\": \"send-daily-report\", \"type\": \"main\" }\n    ]\n  },\n  "nodeTypes": {\n    "n8n-nodes-base.trigger": \"Cron/Manual Trigger\",\n    \"n8n-nodes-base.function\": \"Function - Node.js\",\n    \"n8n-nodes-base.if\": \"If - Conditional\",\n    \"n8n-nodes-base.telegram\": \"Telegram - Notification\",\n    \"n8n-nodes-base.sendGrid\": \"SendGrid - Email\"\n  },\n  "settings": {\n    \"timezone\": \"Asia/Seoul\",\n    \"environment\": \"production\",\n    \"retries\": 1,\n    \"timeout\": 60\n  },\n  "variables": {\n    \"LOGS_PATH\": \"/path/to/logs\",\n    \"QA_LOGS_PATH\": \"/path/to/qa-logs\",\n    \"SENDGRID_API_KEY\": \"${SENDGRID_API_KEY}\",\n    \"TELEGRAM_BOT_TOKEN\": \"${TELEGRAM_BOT_TOKEN}\",\n    \"TELEGRAM_CHAT_ID\": \"${TELEGRAM_CHAT_ID}\"\n  }\n}

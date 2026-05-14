@@ -37,7 +37,13 @@
       "Bash(python3.11:*)",
       "Bash(ls D:/vibecording/showmoneyv2/*.py)",
       "Bash(grep:*)",
-      "Skill(pdca)"
+      "Skill(pdca)",
+      "WebFetch(domain:wikidocs.net)",
+      "WebSearch",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell($json = Get-Content \"D:\\\\vibecording\\\\showmoneyv2\\\\workflow_FINAL_20260502_prev_day_surge_filter.json\" -Raw | ConvertFrom-Json; $json.nodes | Select-Object name, type | Format-Table -AutoSize)",
+      "PowerShell($files = Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\\\\backups\\\\\" -File | Sort-Object LastWriteTime -Descending; $files | Select-Object -First 3 | ForEach-Object { $_.FullName })",
+      "PowerShell(Test-Path \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260419_155609_merged.json\"; \\(Get-Item \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260419_155609_merged.json\" -ErrorAction SilentlyContinue\\).Length)"
     ]
   }
 }

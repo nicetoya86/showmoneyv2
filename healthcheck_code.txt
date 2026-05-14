@@ -1,0 +1,144 @@
+const run = async function () {
+  const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
+  const CHAT = '523002062';
+  const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 30000 }, o));
+
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9*60*60*1000);
+  const today = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth()+1).padStart(2,'0')}-${String(kst.getUTCDate()).padStart(2,'0')}`;
+  const timeKst = `${String(kst.getUTCHours()).padStart(2,'0')}:${String(kst.getUTCMinutes()).padStart(2,'0')}`;
+  const HOLIDAYS_2026 = ['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
+  if (HOLIDAYS_2026.includes(today)) {
+    return [{ json: { skipped: true, reason: 'Holiday (KRX closed)', today, timeKst } }];
+  }
+
+  const store = this.getWorkflowStaticData('global');
+
+  // ===== autofix_krx_stabilize_v1 =====
+  // KRX 장애를 "기록 + 폴백 + 스팸 없는 경고"로 흡수하기 위한 공통 유틸
+  if (!store.healthcheck) store.healthcheck = {};
+  if (!store.healthcheck.krx) store.healthcheck.krx = {};
+  if (!store.healthcheck.krx.alerts) store.healthcheck.krx.alerts = {};
+  const hcKrx = store.healthcheck.krx;
+
+  const pickStatus = (e) => {
+    const s = e?.statusCode ?? e?.response?.statusCode ?? e?.response?.status ?? e?.httpCode ?? e?.cause?.statusCode;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const pickBodySample = (e) => {
+    try {
+      const b = e?.response?.body;
+      if (!b) return null;
+      const t = (typeof b === 'string') ? b : (Buffer.isBuffer(b) ? b.toString('utf8') : JSON.stringify(b));
+      return String(t).slice(0, 400);
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const isCircuitActive = () => {
+    try {
+      if (!hcKrx.circuitUntil) return false;
+      const until = new Date(hcKrx.circuitUntil).getTime();
+      return Number.isFinite(until) && until > now.getTime() && hcKrx.circuitDate === today;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const openCircuit = (reason, status, bodySample) => {
+    const minutes = 30; // 30분 동안 live 호출 중단
+    const until = new Date(now.getTime() + minutes * 60 * 1000).toISOString();
+    hcKrx.circuitDate = today;
+    hcKrx.circuitUntil = until;
+    hcKrx.circuitReason = String(reason || 'unknown');
+    hcKrx.lastFailAt = now.toISOString();
+    hcKrx.lastFailStatus = status ?? null;
+    hcKrx.lastFailBodySample = bodySample ?? null;
+  };
+
+  const noteKrx = (meta) => {
+    hcKrx.last = Object.assign({ at: now.toISOString(), date: today }, meta || {});
+  };
+
+  const notifyOncePerDay = async (key, text) => {
+    const k = String(key || 'default');
+    if (hcKrx.alerts[k] === today) return false;
+    try {
+      await http({
+        method: 'POST',
+        url: 'https://api.telegram.org/bot' + BOT + '/sendMessage',
+        json: true,
+        body: { chat_id: CHAT, text },
+      });
+      hcKrx.alerts[k] = today;
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
+  // ===== /autofix_krx_stabilize_v1 =====
+
+  if (!store.healthcheck) store.healthcheck = {};
+  if (store.healthcheck.lastSentDate === today) {
+    return [{ json: { skipped: true, reason: 'Already sent today', today, timeKst } }];
+  }
+
+  // (선택) KRX 데이터 접근 가능 여부를 같이 점검
+  let krxStatus = '미확인';
+  let krxCount = 0;
+  let krxErrStatus = null;
+  let krxErrBodySample = null;
+
+  if (isCircuitActive()) {
+    krxStatus = `서킷 활성(circuitUntil=${hcKrx.circuitUntil})`;
+  } else {
+    try {
+      const headers = {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Origin': 'https://data.krx.co.kr',
+        'Referer': 'https://data.krx.co.kr/contents/MDC/CM/MDI/mdiLoader/index.cmd',
+        'X-Requested-With': 'XMLHttpRequest',
+        'User-Agent': 'Mozilla/5.0',
+      };
+      const trdDd = `${kst.getUTCFullYear()}${String(kst.getUTCMonth() + 1).padStart(2,'0')}${String(kst.getUTCDate()).padStart(2,'0')}`;
+      const body = `bld=dbms/MDC/STAT/standard/MDCSTAT01501&mktId=ALL&trdDd=${trdDd}&share=1&money=1&csvxls_isNo=false`;
+      const r = await http({ method: 'POST', url: 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd', headers, body, json: true });
+      const rows = (r && (r.output || r.OutBlock_1 || [])) || [];
+      krxCount = rows.length;
+      krxStatus = (krxCount > 0) ? `성공 (${krxCount}개)` : '0건 (휴일/지연/차단 가능)';
+      noteKrx({ ok: (krxCount > 0), source: 'healthcheck', rows: krxCount, trdDd });
+    } catch (e) {
+      const msg = String(e && e.message ? e.message : e);
+      krxErrStatus = pickStatus(e);
+      krxErrBodySample = pickBodySample(e);
+      krxStatus = '에러: ' + msg;
+      openCircuit(msg, krxErrStatus, krxErrBodySample);
+      noteKrx({ ok: false, source: 'healthcheck', rows: 0, error: msg, status: krxErrStatus, bodySample: krxErrBodySample });
+    }
+  }
+
+
+  const msg = `✅ [헬스체크] Autostock 스케줄러 정상\n- KST: ${today} ${timeKst}\n- KRX: ${krxStatus}`;
+
+  try {
+    await http({
+      method: 'POST',
+      url: 'https://api.telegram.org/bot' + BOT + '/sendMessage',
+      json: true,
+      body: { chat_id: CHAT, text: msg }
+    });
+  } catch (e) {
+    return [{ json: { ok: false, error: String(e && e.message ? e.message : e), today, timeKst, krxStatus, krxCount } }];
+  }
+
+  store.healthcheck.lastSentDate = today;
+  store.healthcheck.lastSentAt = now.toISOString();
+  store.healthcheck.lastKrxStatus = krxStatus;
+  store.healthcheck.lastKrxCount = krxCount;
+
+  return [{ json: { ok: true, today, timeKst, krxStatus, krxCount } }];
+};
+return run();

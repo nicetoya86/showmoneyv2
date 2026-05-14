@@ -1,15 +1,15 @@
 {
-  "sessionCount": 68,
+  "sessionCount": 73,
   "lastSession": {
-    "startedAt": "2026-05-09T05:26:25.633Z",
+    "startedAt": "2026-05-14T15:18:58.027Z",
     "platform": "claude",
     "level": "Starter"
   },
-  "feature": "swing-quality-improvement",
-  "phase": "check",
-  "matchRate": 98,
+  "feature": "krx-healthcheck-fix",
+  "phase": "plan",
+  "matchRate": null,
   "designCreatedAt": null,
-  "planCreatedAt": "2026-05-09",
-  "prevFeature": "prev-day-surge-filter",
-  "prevMatchRate": 100
+  "planCreatedAt": "2026-05-11",
+  "prevFeature": "swing-quality-improvement",
+  "prevMatchRate": 98
 }
