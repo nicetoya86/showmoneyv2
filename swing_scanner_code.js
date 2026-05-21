@@ -24,6 +24,11 @@ const run = async function () {
   const REGIME_GAP_DOWN  = -0.007; // 당일 시초 갭다운 -0.7% 이하 → 약세 판정
   const REGIME_SMA_FAST  = 5;      // 빠른 이평 기간 (SMA5 vs SMA20)
   // ===== /Regime 임계값 상수 =====
+  // ===== 매크로 경제 Regime 상수 (2026-05-17 방식A) =====
+  const NASDAQ_DOWN_THRESH = -0.01; // 나스닥 전일 -1% 이하 → 외부 약세 신호
+  const SP500_DOWN_THRESH  = -0.007;// S&P500 선물 -0.7% 이하 → 외부 약세 신호 (실시간, 나스닥과 OR 조합)
+  const VIX_HIGH_THRESH    = 25;    // VIX 25 초과 → regimeLevel +1
+  // ===== /매크로 경제 Regime 상수 =====
   // ===== 전일 급등 진입 억제 상수 (2026-05-02) =====
   const MAX_ENTRY_SURGE_PCT  = 0.10; // 전일대비 10% 초과 → 절대 차단
   const SURGE_ZONE_PCT       = 0.08; // 전일대비 8% 이상 → 고점수 요구 구간 시작
@@ -34,7 +39,7 @@ const run = async function () {
   const ETF_PROVIDERS = ['KODEX', 'TIGER', 'KBSTAR', 'ACE', 'SOL', 'HANARO', 'TIMEFOLIO', 'ARIRANG', 'KOSEF', 'MASTER', 'MAHANMI'];
   const ETF_SCORE_PENALTY    = 15;   // ETF rankScore 패널티 (개별주 대비 기울기 보정)
   const MIN_SCORE_V2         = 100;  // 개선된 최소 통과 점수 (80→100)
-  const MAX_WEEKLY_SENDS     = 5;    // 주간 최대 추천 건수
+  const MAX_WEEKLY_SENDS     = 3;    // 주간 최대 추천 건수 (5→3, 2026-05-17 정확도 향상)
   const MAX_ETF_PER_SEND     = 1;    // 1회 발송 ETF 최대 1건
   const MAX_STOCK_PER_SEND   = 1;    // 1회 발송 개별주 최대 1건
   const INTRADAY_STOP_THRESH = 2;    // 당일 손절 카운터 임계값 (이상 시 발송 억제)
@@ -454,6 +459,33 @@ const run = async function () {
     } catch(e) { return []; }
   };
 
+  // [MACRO-A] 나스닥 전일 수익률 + VIX + S&P500선물 조회 (Yahoo Finance, 당일 1회 캐싱, 2026-05-17)
+  const fetchMacroIndicators = async (store, todayStr) => {
+    if (store.macroCache && store.macroCache.date === todayStr) return store.macroCache;
+    let nasdaqChg = null, vixLevel = null, esFutChg = null;
+    try {
+      const [nasdaqResp, vixResp, esFutResp] = await Promise.all([
+        http({ method: 'GET', url: 'https://query1.finance.yahoo.com/v8/finance/chart/%5EIXIC?interval=1d&range=5d', json: true, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } }),
+        http({ method: 'GET', url: 'https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?interval=1d&range=5d',  json: true, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } }),
+        // S&P500 E-mini 선물: 5분봉으로 실시간 레벨 조회 (09:00 KST 한국장 개장 전 야간선물 반영)
+        http({ method: 'GET', url: 'https://query1.finance.yahoo.com/v8/finance/chart/ES%3DF?interval=5m&range=1d',  json: true, headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json' } }),
+      ]);
+      const nasdaqCloses = (nasdaqResp?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(v => Number.isFinite(v));
+      if (nasdaqCloses.length >= 2) nasdaqChg = nasdaqCloses[nasdaqCloses.length - 1] / nasdaqCloses[nasdaqCloses.length - 2] - 1;
+      const vixCloses = (vixResp?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(v => Number.isFinite(v));
+      if (vixCloses.length >= 1) vixLevel = vixCloses[vixCloses.length - 1];
+      // ES=F: 현재 선물 가격 vs 전일 종가(chartPreviousClose) → 야간 변화율 계산
+      const esPrevClose = esFutResp?.chart?.result?.[0]?.meta?.chartPreviousClose;
+      const esCloses    = (esFutResp?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || []).filter(v => Number.isFinite(v));
+      if (Number.isFinite(esPrevClose) && esPrevClose > 0 && esCloses.length > 0) {
+        esFutChg = esCloses[esCloses.length - 1] / esPrevClose - 1;
+      }
+    } catch (e) { /* 매크로 데이터 로드 실패 → null 유지, 차단 없이 통과 */ }
+    const result = { date: todayStr, nasdaqChg, vixLevel, esFutChg };
+    store.macroCache = result;
+    return result;
+  };
+
   // [REGIME-OPT3] 3단계 Regime + 당일 갭 감지 (2026-05-02 개선)
   // regimeLevel: 0=강세(전 등급 허용), 1=중립(매도차익 차단), 2=약세(강매 전용)
   const getMarketRegime = async (store, today) => {
@@ -524,6 +556,22 @@ const run = async function () {
       regimeLevel = 0; // 데이터 오류 시 차단 없이 통과 (보수적 fallback)
     }
 
+    // ── [MACRO-A] 매크로 지표 적용: 나스닥 + VIX + S&P500선물 (2026-05-17) ──
+    let nasdaqChg = null, vixLevel = null, esFutChg = null, macroAdj = 0;
+    try {
+      const macro = await fetchMacroIndicators(store, today);
+      nasdaqChg = macro.nasdaqChg;
+      vixLevel  = macro.vixLevel;
+      esFutChg  = macro.esFutChg;
+      // 나스닥 전일 OR S&P500선물 실시간 중 하나라도 임계치 이하 → +1 (중복 카운트 방지)
+      const extMarketBear = (Number.isFinite(nasdaqChg) && nasdaqChg < NASDAQ_DOWN_THRESH) ||
+                            (Number.isFinite(esFutChg)  && esFutChg  < SP500_DOWN_THRESH);
+      if (extMarketBear)                                             macroAdj++;
+      if (Number.isFinite(vixLevel) && vixLevel > VIX_HIGH_THRESH)  macroAdj++;
+      regimeLevel = Math.min(2, regimeLevel + macroAdj);
+    } catch (e) { /* 매크로 적용 실패 → 기존 regimeLevel 유지 */ }
+    // ── /MACRO-A ──
+
     const riskOn = regimeLevel < 2; // 기존 sizeFactor 호환성 유지
     store.regimeCache = {
       date: today, riskOn, regimeLevel,
@@ -531,6 +579,10 @@ const run = async function () {
       ksGap: (ksGap * 100).toFixed(2) + '%',
       kqGap: (kqGap * 100).toFixed(2) + '%',
       gapSource,
+      nasdaqChg: Number.isFinite(nasdaqChg) ? (nasdaqChg * 100).toFixed(2) + '%' : 'N/A',
+      vixLevel:  Number.isFinite(vixLevel)  ? vixLevel.toFixed(1)              : 'N/A',
+      esFutChg:  Number.isFinite(esFutChg)  ? (esFutChg * 100).toFixed(2) + '%' : 'N/A',
+      macroAdj,
       at: new Date().toISOString(),
     };
     return store.regimeCache;
@@ -604,6 +656,18 @@ const run = async function () {
     if (dateKey < cutoffStr) delete store.weeklyRecommendations[dateKey];
   }
   if (!store.weeklyRecommendations[today]) store.weeklyRecommendations[today] = [];
+
+  // ===== [SCAN-LOG] 상세 스캔 로그 초기화 (2026-05-17) =====
+  if (!store.scanLog) store.scanLog = [];
+  const _log = {
+    runId: requestId,
+    date: today, startKst: timeStrNow, startAt: now.toISOString(),
+    regime: {}, macro: {},
+    rejected: { regime: 0, surge: 0, rr: 0, score: 0, duplicate: 0, weekly: 0, other: 0 },
+    topCandidates: [], sent: [], stats: {},
+    finishedAt: null,
+  };
+  // ===== /SCAN-LOG 초기화 =====
 
   const cleanOldHistory = () => {
     const cutoff = now.getTime() - DUPLICATE_WINDOW_MINUTES * 60 * 1000;
@@ -1202,7 +1266,7 @@ const run = async function () {
     const batch = ALL_TICKERS.slice(i, i + BATCH_SIZE);
     await Promise.all(batch.map(async (t) => {
       try {
-        if (store.swingSent[t]) return;
+        if (store.swingSent[t]) { _log.rejected.duplicate++; return; }
 
         const cDaily = await httpDaily(t);
         const errDaily = cDaily?.chart?.error?.description;
@@ -1608,7 +1672,7 @@ const run = async function () {
         // [NEW-6] 3% 최저 목표가 보장 + R:R 1.5 필터
         target = Math.max(target, currentPrice * (1 + MIN_TARGET_PCT));
         const rr = (stop > 0 && currentPrice > stop) ? (target - currentPrice) / (currentPrice - stop) : 0;
-        if (rr < MIN_RR_RATIO) return; // 불리한 R:R 차단
+        if (rr < MIN_RR_RATIO) { _log.rejected.rr++; return; } // 불리한 R:R 차단
 
         // 1차 목표가: 데이터 5~10% 구간(41.6%) 기반, 모든 등급 공통
         // target보다 작을 때만 유효 (저변동성 종목에서 target1 > target 역전 방지)
@@ -1620,16 +1684,19 @@ const run = async function () {
         const regimeLevel = rg?.regimeLevel ?? 0;
 
         // [REGIME-FIX] 시장 단계별 진입 차단 (2026-05-02)
-        if (regimeLevel >= 2 && grade !== '강매') return; // 약세장: 강매(score≥120) 전용
-        if (regimeLevel >= 1 && grade === '매도차익') return; // 중립장: 매도차익 차단
+        if (regimeLevel >= 2 && grade !== '강매') { _log.rejected.regime++; return; } // 약세장: 강매(score≥120) 전용
+        if (regimeLevel >= 1 && grade === '매도차익') { _log.rejected.regime++; return; } // 중립장: 매도차익 차단
         // [SURGE-FILTER] 전일 급등 종목 진입 억제 (2026-05-02)
-        if (dailyChange > MAX_ENTRY_SURGE_PCT) return; // +10% 초과: 절대 차단
-        if (dailyChange > SURGE_ZONE_PCT && score < SURGE_ZONE_MIN_SCORE) return; // +8%+: 점수 270 미만 차단
+        if (dailyChange > MAX_ENTRY_SURGE_PCT) { _log.rejected.surge++; return; } // +10% 초과: 절대 차단
+        if (dailyChange > SURGE_ZONE_PCT && score < SURGE_ZONE_MIN_SCORE) { _log.rejected.surge++; return; } // +8%+: 점수 270 미만 차단
 
         // [REGIME-LOG] 매일 1회 시장 Regime 상태 Telegram 알림
         if (!store.regimeLogSent || store.regimeLogSent !== today) {
           store.regimeLogSent = today;
           const levelLabel = ['✅ 강세(0) — 전 등급 허용', '⚡ 중립(1) — 매도차익 차단', '⚠️ 약세(2) — 강매 전용'][regimeLevel] || String(regimeLevel);
+          const nasdaqWarn = rg.nasdaqChg && rg.nasdaqChg !== 'N/A' && parseFloat(rg.nasdaqChg) < -1   ? ' ⚠️' : '';
+          const esFutWarn  = rg.esFutChg  && rg.esFutChg  !== 'N/A' && parseFloat(rg.esFutChg)  < -0.7 ? ' ⚠️' : '';
+          const vixWarn    = rg.vixLevel  && rg.vixLevel  !== 'N/A' && parseFloat(rg.vixLevel)   > 25   ? ' ⚠️' : '';
           const regimeMsg =
             '📊 [시장 Regime] ' + today + NL +
             '수준: ' + levelLabel + NL +
@@ -1638,7 +1705,12 @@ const run = async function () {
             'KOSPI 갭/전일변화: ' + (rg.ksGap || 'N/A') + ' (' + (rg.gapSource || '?') + ')' + NL +
             'KOSDAQ SMA20>SMA60: ' + (rg.kqUp === null ? 'N/A' : (rg.kqUp ? '✅' : '❌')) + NL +
             'KOSDAQ SMA5>SMA20:  ' + (rg.kqUpFast === null ? 'N/A' : (rg.kqUpFast ? '✅' : '❌')) + NL +
-            'KOSDAQ 갭/전일변화: ' + (rg.kqGap || 'N/A');
+            'KOSDAQ 갭/전일변화: ' + (rg.kqGap || 'N/A') + NL +
+            '── 매크로 ──' + NL +
+            '나스닥 전일: ' + (rg.nasdaqChg || 'N/A') + nasdaqWarn + NL +
+            'S&P500선물(실시간): ' + (rg.esFutChg || 'N/A') + esFutWarn + NL +
+            'VIX: ' + (rg.vixLevel || 'N/A') + vixWarn + NL +
+            '매크로 Regime조정: +' + (rg.macroAdj || 0);
           try {
             await http({ method: 'POST', url: 'https://api.telegram.org/bot' + BOT + '/sendMessage',
               json: true, body: { chat_id: CHAT, text: regimeMsg } });
@@ -1807,6 +1879,9 @@ const run = async function () {
       // [QI-2] 상관관계 중복 차단: 이번 주 + 이미 picked 내 상관 종목 제외
       const alreadySent = [...thisWeekRecs, ...picked];
       if (isCorrelationDuplicate(c.name, alreadySent)) continue;
+      // [QI-7] 동일 종목코드 중복 차단: 이번 주 동일 code 재추천 방지 (2026-05-17)
+      const sentCodes = new Set(alreadySent.map(r => r.code));
+      if (sentCodes.has(c.code)) continue;
       picked.push(c);
     }
     return picked;
@@ -1872,6 +1947,8 @@ const run = async function () {
       ? '- 1차 목표: ' + to0(c.target1) + '원 (+' + pct(c.target1 / c.entry - 1) + ')' + NL
       : '';
     const pgmWarningLine = pgmCaution ? '⚠️ 프로그램 순매도 과다 — 반절매 주의' + NL : '';
+    const atrPct = Number.isFinite(c.atrAbs) && c.entry > 0 ? (c.atrAbs / c.entry * 100) : 2.0;
+    const trailingPct = Math.max(1.0, Math.min(atrPct, 3.0));
     const msg =
       gradePrefix + '[당일단타] ' + c.market + '(' + typeLabel + ') | ' + displayName + '(' + c.code + ')' + NL +
       '등급: ' + (c.grade || '매수') + NL +
@@ -1881,6 +1958,8 @@ const run = async function () {
       target1Line +
       '- 최종 목표: ' + to0(c.target) + '원 (+' + pct(c.target / c.entry - 1) + ')' + NL +
       '- 손절가: ' + to0(c.stop) + '원 (-' + pct(1 - c.stop / c.entry) + ')' + NL +
+      '- 트레일링: +2% 도달시 고점 -' + trailingPct.toFixed(1) + '% 이동' + NL +
+      '📊 분할청산: 1차(30%) +2% / 2차(30%) +4% / 잔여(40%) 트레일링' + NL +
       pgmWarningLine +
       'ATR(14): ' + (Number.isFinite(c.atrAbs) ? (to0(c.atrAbs) + '원') : 'N/A') + NL +
       '- 점수: ' + c.score + '점' + NL +
@@ -1976,6 +2055,31 @@ const run = async function () {
     } catch (e) {}
     store.swingAlerts.noHitDate = today;
   }
+
+  // ===== [SCAN-LOG] 상세 로그 최종화 및 저장 (2026-05-17) =====
+  try {
+    const rg0 = store.regimeCache || {};
+    _log.regime = { level: rg0.regimeLevel ?? 0, ksUp: rg0.ksUp, kqUp: rg0.kqUp };
+    _log.macro  = { nasdaqChg: rg0.nasdaqChg, esFutChg: rg0.esFutChg, vixLevel: rg0.vixLevel, macroAdj: rg0.macroAdj };
+    _log.topCandidates = candidates.slice(0, 10).map(c => ({
+      ticker: c.ticker, name: c.name, grade: c.grade,
+      score: c.score, rankScore: c.rankScore,
+      rvol: c.rvolVal != null ? +c.rvolVal.toFixed(2) : null,
+      dailyChange: +(c.dailyChange * 100).toFixed(2),
+      entry: +c.entry.toFixed(0), target: +c.target.toFixed(0), stop: +c.stop.toFixed(0),
+      signals: (c.signals || []).slice(0, 6), isETF: !!c.isETF,
+    }));
+    _log.sent  = sent.slice();
+    _log.stats = {
+      universe: ALL_TICKERS.length, candidates: candidates.length,
+      sentCount: sent.length, excludedRisk, excludedTheme,
+      naverOk: naverOkCount, naverNoResult: naverNoResultCount, naverErr: naverErrorCount,
+    };
+    _log.finishedAt = new Date().toISOString();
+    store.scanLog.unshift(_log);
+    if (store.scanLog.length > 20) store.scanLog.length = 20;
+  } catch (_e) { /* 로그 저장 실패 무시 */ }
+  // ===== /SCAN-LOG =====
 
   store.swingMeta._lastFullFinish = Date.now();
 
