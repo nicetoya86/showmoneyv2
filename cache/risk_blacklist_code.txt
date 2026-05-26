@@ -1,4 +1,4 @@
-﻿const store = this.getWorkflowStaticData('global');
+const store = this.getWorkflowStaticData('global');
 if (!store.blacklist) store.blacklist = {};
 
 const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 30000 }, o));
@@ -7,7 +7,6 @@ const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
 const CHAT = '523002062';
 const NL = String.fromCharCode(10);
 
-// ===== SAFE GUARD (autofix) =====
 async function notify(text) {
   try {
     await http({
@@ -25,13 +24,50 @@ const prev = {
 };
 
 try {
+
 const KRX_URL = 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd';
+const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// ===== 세션 쿠키 사전 획득 =====
+// KRX 서버는 브라우저 세션 없이 자동화 요청을 차단함
+// GET으로 메인 페이지를 먼저 방문해 쿠키를 획득한 뒤 POST에 포함
+let sessionCookie = '';
+try {
+  const sessionRes = await http({
+    method: 'GET',
+    url: 'https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC02021201',
+    headers: {
+      'User-Agent': BASE_UA,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+    },
+    returnFullResponse: true,
+  });
+  const setCookie = sessionRes?.headers?.['set-cookie'];
+  if (setCookie) {
+    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+    sessionCookie = cookies.map(c => c.split(';')[0]).join('; ');
+  }
+  store.blacklist._sessionAt = new Date().toISOString();
+} catch (e) {
+  store.blacklist._sessionErr = String(e?.message || e);
+}
+
 const KRX_HEADERS = {
   'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-  Origin: 'https://data.krx.co.kr',
-  Referer: 'https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC02021201',
+  'Accept': 'application/json, text/javascript, */*; q=0.01',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Origin': 'https://data.krx.co.kr',
+  'Referer': 'https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC02021201',
   'X-Requested-With': 'XMLHttpRequest',
-  'User-Agent': 'Mozilla/5.0',
+  'User-Agent': BASE_UA,
+  'Connection': 'keep-alive',
+  ...(sessionCookie ? { 'Cookie': sessionCookie } : {}),
 };
 
 const KRX_BLDS = [
@@ -44,26 +80,39 @@ const KRX_BLDS = [
   'dbms/MDC/STAT/issue/MDCSTAT23401', // 투자위험
 ];
 
-async function fetchKrXCodes(bld) {
+// ===== 재시도 포함 KRX 요청 =====
+// 일시적 차단 시 최대 3회, 2초 간격으로 재시도
+async function fetchKrxCodesWithRetry(bld, maxRetry = 3) {
   const body = `bld=${encodeURIComponent(bld)}&locale=ko_KR&mktId=ALL&csvxls_isNo=true`;
-  const res = await http({
-    method: 'POST',
-    url: KRX_URL,
-    headers: KRX_HEADERS,
-    body,
-    json: true,
-  });
+  let lastErr = null;
 
-  const rows = (res && (res.output || res.OutBlock_1 || [])) || [];
-  const codes = [];
-  for (const r of rows) {
-    const c = String(r?.ISU_CD || '').trim();
-    if (/^\d{6}$/.test(c)) codes.push(c);
+  for (let attempt = 1; attempt <= maxRetry; attempt++) {
+    try {
+      const res = await http({
+        method: 'POST',
+        url: KRX_URL,
+        headers: KRX_HEADERS,
+        body,
+        json: true,
+      });
+      const rows = (res && (res.output || res.OutBlock_1 || [])) || [];
+      const codes = [];
+      for (const r of rows) {
+        const c = String(r?.ISU_CD || '').trim();
+        if (/^\d{6}$/.test(c)) codes.push(c);
+      }
+      return codes;
+    } catch (e) {
+      lastErr = e;
+      const status = e?.statusCode ?? e?.response?.statusCode ?? e?.cause?.statusCode ?? '?';
+      store.blacklist._lastRetryErr = `attempt${attempt} bld=${bld.split('/').pop()} status=${status} msg=${String(e?.message || e).slice(0, 120)}`;
+      if (attempt < maxRetry) await sleep(2000 * attempt);
+    }
   }
-  return codes;
+  throw lastErr;
 }
 
-// KIND 실질심사법인: EXCEL 버튼이 실제로는 HTML 테이블을 내려줌
+// KIND 실질심사법인: HTML 테이블 파싱
 async function fetchKindRealInvestigationCodes() {
   const url = 'https://kind.krx.co.kr/corpgeneral/delistRealInvstg.do';
   const form = {
@@ -76,7 +125,6 @@ async function fetchKindRealInvestigationCodes() {
     fromDate: '',
     toDate: '',
   };
-
   const body = Object.entries(form)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join('&');
@@ -86,9 +134,9 @@ async function fetchKindRealInvestigationCodes() {
     url,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
-      Origin: 'https://kind.krx.co.kr',
-      Referer: 'https://kind.krx.co.kr/corpgeneral/delistRealInvstg.do?method=searchDelistRealInvstgMain',
-      'User-Agent': 'Mozilla/5.0',
+      'Origin': 'https://kind.krx.co.kr',
+      'Referer': 'https://kind.krx.co.kr/corpgeneral/delistRealInvstg.do?method=searchDelistRealInvstgMain',
+      'User-Agent': BASE_UA,
     },
     body,
     json: false,
@@ -96,11 +144,9 @@ async function fetchKindRealInvestigationCodes() {
 
   const text = Buffer.isBuffer(raw) ? raw.toString('latin1') : String(raw);
   const set = new Set();
-
   for (const m of text.matchAll(/mso-number-format:'@'[^>]*>\s*(\d{6})\s*<\/td>/g)) {
     set.add(m[1]);
   }
-
   return [...set];
 }
 
@@ -108,7 +154,7 @@ const codes = new Set();
 const sourceCounts = {};
 
 for (const bld of KRX_BLDS) {
-  const list = await fetchKrXCodes(bld);
+  const list = await fetchKrxCodesWithRetry(bld);
   sourceCounts[bld] = list.length;
   for (const c of list) codes.add(c);
 }
@@ -120,6 +166,7 @@ for (const c of kindCodes) codes.add(c);
 store.blacklist.riskCodes = [...codes].sort();
 store.blacklist.riskUpdatedAt = new Date().toISOString();
 store.blacklist.riskSourceCounts = sourceCounts;
+store.blacklist._sessionCookieLen = sessionCookie.length;
 
 return [
   {
@@ -128,18 +175,26 @@ return [
       riskCodesCount: store.blacklist.riskCodes.length,
       riskSourceCounts: sourceCounts,
       riskUpdatedAt: store.blacklist.riskUpdatedAt,
+      sessionCookieObtained: sessionCookie.length > 0,
     },
   },
 ];
 
 } catch (e) {
   const msg = e?.message ? String(e.message) : String(e);
-  store.blacklist.riskLastError = { at: new Date().toISOString(), message: msg };
-  // 기존 값 유지
+  const status = e?.statusCode ?? e?.response?.statusCode ?? e?.cause?.statusCode ?? null;
+  const errDetail = status ? `HTTP ${status}: ${msg}` : msg;
+
+  store.blacklist.riskLastError = {
+    at: new Date().toISOString(),
+    message: errDetail,
+    status,
+    sessionCookieLen: sessionCookie ? sessionCookie.length : 0,
+  };
+
   if (prev.riskCodes) store.blacklist.riskCodes = prev.riskCodes;
   if (prev.riskUpdatedAt) store.blacklist.riskUpdatedAt = prev.riskUpdatedAt;
-  await notify('🚨 [리스크 블랙리스트 갱신 실패]' + NL + msg);
-  return [{ json: { ok: false, error: msg, riskUpdatedAt: store.blacklist.riskUpdatedAt || null } }];
-}
-// ===== /SAFE GUARD (autofix) =====
 
+  await notify('🚨 [리스크 블랙리스트 갱신 실패]' + NL + errDetail + NL + `(캐시: ${store.blacklist.riskUpdatedAt || '없음'})`);
+  return [{ json: { ok: false, error: errDetail, status, riskUpdatedAt: store.blacklist.riskUpdatedAt || null } }];
+}
