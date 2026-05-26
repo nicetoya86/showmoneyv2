@@ -50,7 +50,11 @@ try {
   const setCookie = sessionRes?.headers?.['set-cookie'];
   if (setCookie) {
     const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
-    sessionCookie = cookies.map(c => c.split(';')[0]).join('; ');
+    // returnFullResponse 결과의 set-cookie 배열에 undefined 요소가 포함될 수 있어 타입 가드 필요
+    sessionCookie = cookies
+      .filter(c => typeof c === 'string' && c.length > 0)
+      .map(c => c.split(';')[0])
+      .join('; ');
   }
   store.blacklist._sessionAt = new Date().toISOString();
 } catch (e) {
