@@ -6,6 +6,7 @@ const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout
 const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
 const CHAT = '523002062';
 const NL = String.fromCharCode(10);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 async function notify(text) {
   try {
@@ -19,48 +20,13 @@ async function notify(text) {
 }
 
 const prev = {
-  riskCodes: Array.isArray(store.blacklist?.riskCodes) ? store.blacklist.riskCodes.slice() : null,
-  riskUpdatedAt: store.blacklist?.riskUpdatedAt || null,
+  riskCodes: Array.isArray(store.blacklist.riskCodes) ? store.blacklist.riskCodes.slice() : null,
+  riskUpdatedAt: store.blacklist.riskUpdatedAt || null,
 };
 
 try {
 
 const KRX_URL = 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd';
-const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-// ===== 세션 쿠키 사전 획득 =====
-// KRX 서버는 브라우저 세션 없이 자동화 요청을 차단함
-// GET으로 메인 페이지를 먼저 방문해 쿠키를 획득한 뒤 POST에 포함
-let sessionCookie = '';
-try {
-  const sessionRes = await http({
-    method: 'GET',
-    url: 'https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC02021201',
-    headers: {
-      'User-Agent': BASE_UA,
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-    },
-    returnFullResponse: true,
-  });
-  const setCookie = sessionRes?.headers?.['set-cookie'];
-  if (setCookie) {
-    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
-    // returnFullResponse 결과의 set-cookie 배열에 undefined 요소가 포함될 수 있어 타입 가드 필요
-    sessionCookie = cookies
-      .filter(c => typeof c === 'string' && c.length > 0)
-      .map(c => c.split(';')[0])
-      .join('; ');
-  }
-  store.blacklist._sessionAt = new Date().toISOString();
-} catch (e) {
-  store.blacklist._sessionErr = String(e?.message || e);
-}
-
 const KRX_HEADERS = {
   'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
   'Accept': 'application/json, text/javascript, */*; q=0.01',
@@ -69,9 +35,8 @@ const KRX_HEADERS = {
   'Origin': 'https://data.krx.co.kr',
   'Referer': 'https://data.krx.co.kr/contents/MDC/MDI/mdiLoader/index.cmd?menuId=MDC02021201',
   'X-Requested-With': 'XMLHttpRequest',
-  'User-Agent': BASE_UA,
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Connection': 'keep-alive',
-  ...(sessionCookie ? { 'Cookie': sessionCookie } : {}),
 };
 
 const KRX_BLDS = [
@@ -84,13 +49,12 @@ const KRX_BLDS = [
   'dbms/MDC/STAT/issue/MDCSTAT23401', // 투자위험
 ];
 
-// ===== 재시도 포함 KRX 요청 =====
-// 일시적 차단 시 최대 3회, 2초 간격으로 재시도
-async function fetchKrxCodesWithRetry(bld, maxRetry = 3) {
-  const body = `bld=${encodeURIComponent(bld)}&locale=ko_KR&mktId=ALL&csvxls_isNo=true`;
-  let lastErr = null;
+// KRX 요청 — 최대 3회 재시도 (2초, 4초 간격)
+async function fetchKrxCodes(bld) {
+  const body = 'bld=' + encodeURIComponent(bld) + '&locale=ko_KR&mktId=ALL&csvxls_isNo=true';
+  let lastErr;
 
-  for (let attempt = 1; attempt <= maxRetry; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const res = await http({
         method: 'POST',
@@ -102,103 +66,99 @@ async function fetchKrxCodesWithRetry(bld, maxRetry = 3) {
       const rows = (res && (res.output || res.OutBlock_1 || [])) || [];
       const codes = [];
       for (const r of rows) {
-        const c = String(r?.ISU_CD || '').trim();
+        const c = String(r && r.ISU_CD || '').trim();
         if (/^\d{6}$/.test(c)) codes.push(c);
       }
       return codes;
     } catch (e) {
       lastErr = e;
-      const status = e?.statusCode ?? e?.response?.statusCode ?? e?.cause?.statusCode ?? '?';
-      store.blacklist._lastRetryErr = `attempt${attempt} bld=${bld.split('/').pop()} status=${status} msg=${String(e?.message || e).slice(0, 120)}`;
-      if (attempt < maxRetry) await sleep(2000 * attempt);
+      const status = (e && (e.statusCode || (e.response && e.response.statusCode))) || '?';
+      store.blacklist.riskLastRetry = 'attempt' + attempt + ' status=' + status;
+      if (attempt < 3) await sleep(2000 * attempt);
     }
   }
   throw lastErr;
 }
 
-// KIND 실질심사법인: HTML 테이블 파싱
-async function fetchKindRealInvestigationCodes() {
-  const url = 'https://kind.krx.co.kr/corpgeneral/delistRealInvstg.do';
-  const form = {
-    method: 'searchDelistRealInvstg',
-    forward: 'delistRealInvstg_down',
-    pageIndex: '1',
-    currentPageSize: '3000',
-    mktTpCd: '',
-    progrsDelistYn: '',
-    fromDate: '',
-    toDate: '',
-  };
-  const body = Object.entries(form)
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-    .join('&');
+// KIND 실질심사법인 — HTML 테이블 파싱
+async function fetchKindCodes() {
+  const formData = [
+    'method=searchDelistRealInvstg',
+    'forward=delistRealInvstg_down',
+    'pageIndex=1',
+    'currentPageSize=3000',
+    'mktTpCd=',
+    'progrsDelistYn=',
+    'fromDate=',
+    'toDate=',
+  ].join('&');
 
   const raw = await http({
     method: 'POST',
-    url,
+    url: 'https://kind.krx.co.kr/corpgeneral/delistRealInvstg.do',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       'Origin': 'https://kind.krx.co.kr',
       'Referer': 'https://kind.krx.co.kr/corpgeneral/delistRealInvstg.do?method=searchDelistRealInvstgMain',
-      'User-Agent': BASE_UA,
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     },
-    body,
+    body: formData,
     json: false,
   });
 
-  const text = Buffer.isBuffer(raw) ? raw.toString('latin1') : String(raw);
+  const text = (raw && Buffer.isBuffer(raw)) ? raw.toString('latin1') : String(raw || '');
   const set = new Set();
-  for (const m of text.matchAll(/mso-number-format:'@'[^>]*>\s*(\d{6})\s*<\/td>/g)) {
+  const pattern = /mso-number-format:'@'[^>]*>\s*(\d{6})\s*<\/td>/g;
+  let m;
+  while ((m = pattern.exec(text)) !== null) {
     set.add(m[1]);
   }
-  return [...set];
+  return Array.from(set);
 }
 
-const codes = new Set();
+// 전체 수집
+const allCodes = new Set();
 const sourceCounts = {};
 
-for (const bld of KRX_BLDS) {
-  const list = await fetchKrxCodesWithRetry(bld);
-  sourceCounts[bld] = list.length;
-  for (const c of list) codes.add(c);
+for (let i = 0; i < KRX_BLDS.length; i++) {
+  const bld = KRX_BLDS[i];
+  const list = await fetchKrxCodes(bld);
+  const key = bld.split('/').pop();
+  sourceCounts[key] = list.length;
+  for (let j = 0; j < list.length; j++) allCodes.add(list[j]);
 }
 
-const kindCodes = await fetchKindRealInvestigationCodes();
-sourceCounts['KIND:realInvestigation'] = kindCodes.length;
-for (const c of kindCodes) codes.add(c);
+const kindList = await fetchKindCodes();
+sourceCounts['KIND'] = kindList.length;
+for (let k = 0; k < kindList.length; k++) allCodes.add(kindList[k]);
 
-store.blacklist.riskCodes = [...codes].sort();
+store.blacklist.riskCodes = Array.from(allCodes).sort();
 store.blacklist.riskUpdatedAt = new Date().toISOString();
 store.blacklist.riskSourceCounts = sourceCounts;
-store.blacklist._sessionCookieLen = sessionCookie.length;
 
-return [
-  {
-    json: {
-      ok: true,
-      riskCodesCount: store.blacklist.riskCodes.length,
-      riskSourceCounts: sourceCounts,
-      riskUpdatedAt: store.blacklist.riskUpdatedAt,
-      sessionCookieObtained: sessionCookie.length > 0,
-    },
+return [{
+  json: {
+    ok: true,
+    riskCodesCount: store.blacklist.riskCodes.length,
+    riskSourceCounts: sourceCounts,
+    riskUpdatedAt: store.blacklist.riskUpdatedAt,
   },
-];
+}];
 
 } catch (e) {
-  const msg = e?.message ? String(e.message) : String(e);
-  const status = e?.statusCode ?? e?.response?.statusCode ?? e?.cause?.statusCode ?? null;
-  const errDetail = status ? `HTTP ${status}: ${msg}` : msg;
+  const msg = String(e && e.message ? e.message : e);
+  const status = (e && (e.statusCode || (e.response && e.response.statusCode))) || null;
+  const detail = status ? 'HTTP ' + status + ': ' + msg : msg;
 
   store.blacklist.riskLastError = {
     at: new Date().toISOString(),
-    message: errDetail,
-    status,
-    sessionCookieLen: sessionCookie ? sessionCookie.length : 0,
+    message: detail,
+    status: status,
   };
 
   if (prev.riskCodes) store.blacklist.riskCodes = prev.riskCodes;
   if (prev.riskUpdatedAt) store.blacklist.riskUpdatedAt = prev.riskUpdatedAt;
 
-  await notify('🚨 [리스크 블랙리스트 갱신 실패]' + NL + errDetail + NL + `(캐시: ${store.blacklist.riskUpdatedAt || '없음'})`);
-  return [{ json: { ok: false, error: errDetail, status, riskUpdatedAt: store.blacklist.riskUpdatedAt || null } }];
+  await notify('🚨 [리스크 블랙리스트 갱신 실패]' + NL + detail + NL + '(캐시: ' + (store.blacklist.riskUpdatedAt || '없음') + ')');
+  return [{ json: { ok: false, error: detail, status: status, riskUpdatedAt: store.blacklist.riskUpdatedAt || null } }];
 }
