@@ -4,14 +4,15 @@
 |------|--------|
 | Feature | sp500-futures-macro |
 | Start Date | 2026-05-17 |
+| Updated | 2026-05-28 (설계 변경 반영) |
 | Target Phase | Do (구현 완료) |
 
 | Perspective | Content |
 |-------------|---------|
-| Problem | 나스닥 전일 종가 기준 매크로 판단은 최대 16시간 전 정보 — 한국장 09:00 KST 시점의 실시간 미국 시장 방향성 반영 불가 |
-| Solution | S&P500 E-mini 선물(ES=F) 5분봉 실시간 조회 추가, 나스닥과 OR 결합으로 외부 약세 신호 단일 카운트 |
-| UX Effect | 매일 Telegram Regime 알림에 `S&P500선물(실시간):` 항목 추가 — 야간 선물 하락 시 ⚠️ 즉시 확인 가능 |
-| Core Value | 전날 데이터가 아닌 당일 실시간 미국 선물 레벨로 Regime 판정 정확도 향상 |
+| Problem | 나스닥·VIX 각각 독립 +1로 regimeLevel 과잉 상승 — 한국 강세장에서도 미국 지표 하나만 흔들리면 발송 차단 |
+| Solution | **[설계 변경]** ES=F 미적용 → NASDAQ AND VIX 동시 약세일 때만 +1 (기존 각 독립 +1 폐기) |
+| UX Effect | 한국 강세장에서 미국 지표 단독 약세로 인한 불필요한 발송 차단 해소 |
+| Core Value | 과잉 차단 방지 + 진짜 위험 신호(나스닥+VIX 동시 약세) 집중 대응 |
 
 ---
 
@@ -39,54 +40,45 @@ S&P500 E-mini 선물(`ES=F`)은 거의 24시간 거래되므로, 09:00 KST 스�
 
 ---
 
-## 2. 개선 방향 상세
+## 2. 실제 구현된 설계 (2026-05-28 변경 확정)
 
-### 개선 1: ES=F 실시간 조회 (핵심)
+> **설계 변경 이유**: ES=F 방식(나스닥 OR ES=F)은 두 지표가 높은 상관관계(r≈0.95)를 갖고
+> 있어 OR 결합 시에도 실질적으로 나스닥 단독 트리거와 차이 없음.
+> 반면 기존 "각각 독립 +1" 방식은 한국 시장이 강세임에도 나스닥 혼자 -1% 이하면
+> regimeLevel이 올라가는 과잉 차단 문제가 있었음.
+> → 나스닥+VIX **동시 약세**를 진짜 위험 신호로 재정의.
 
-**대상**: `swing_scanner_code.js` — `fetchMacroIndicators` 함수
+### 확정된 구현: NASDAQ AND VIX 동시 약세 → +1
 
-**방식**: Yahoo Finance `/v8/finance/chart/ES%3DF?interval=5m&range=1d`
-- `meta.chartPreviousClose` = 전일 정규세션 종가 (기준값)
-- 5분봉 마지막 종가 = 현재 선물 레벨 (실시간)
-- `esFutChg = 현재 / 전일종가 - 1` → 야간 변화율
-
-**임계값**: `SP500_DOWN_THRESH = -0.007` (-0.7%)
-- 나스닥(-1%)보다 민감하게 설정 (S&P500은 변동성 낮음)
-- 야간 선물 -0.7% 이하 시 외부 약세 신호 발동
-
----
-
-### 개선 2: OR 결합으로 중복 카운트 방지
-
-**설계 원칙**: 나스닥과 ES=F는 고상관(r ≈ 0.95), 둘이 동시 트리거될 경우 macroAdj를 2 올리면 regimeLevel 과도 상승
-
-**구현**:
 ```js
-// 나스닥 전일 OR S&P500선물 실시간 중 하나라도 임계치 이하 → 단 +1
-const extMarketBear = (nasdaqChg < -0.01) || (esFutChg < -0.007);
-if (extMarketBear) macroAdj++;   // 최대 1회
-if (vixLevel > 25) macroAdj++;  // VIX는 독립 신호 → 별도 +1
+// FIX: 나스닥·VIX 독립 +1 → 동시 약세일 때만 +1 (한국 강세장에서 과잉 차단 방지)
+const bothMacroWeak = Number.isFinite(nasdaqChg) && nasdaqChg < NASDAQ_DOWN_THRESH
+                   && Number.isFinite(vixLevel)  && vixLevel  > VIX_HIGH_THRESH;
+if (bothMacroWeak) macroAdj = 1;
+regimeLevel = Math.min(2, regimeLevel + macroAdj);
 ```
 
 **조합별 동작**:
-| 나스닥 | ES=F 선물 | VIX | macroAdj | 결과 |
-|--------|-----------|-----|----------|------|
-| 정상   | 정상      | 정상 | 0 | regimeLevel 유지 |
-| 하락   | 정상      | 정상 | +1 | 중립 또는 약세 |
-| 정상   | 하락      | 정상 | +1 | 중립 또는 약세 (실시간 선물 반영!) |
-| 하락   | 하락      | 정상 | +1 | 중복 방지 — 과도 상승 차단 |
-| 하락   | 하락      | 고VIX | +2 | 강한 약세 신호 |
+| 나스닥 | VIX | macroAdj | 결과 |
+|--------|-----|----------|------|
+| 정상   | 정상 | 0 | regimeLevel 유지 |
+| -1%+  | 정상 | 0 | 한국 강세면 발송 허용 |
+| 정상   | 25+ | 0 | 한국 강세면 발송 허용 |
+| -1%+  | 25+ | +1 | 진짜 위험 신호 → regimeLevel 상승 |
+
+### 폐기된 설계: ES=F 실시간 조회
+
+ES=F(S&P500 선물) 실시간 조회는 아래 이유로 구현하지 않기로 결정:
+- 나스닥·ES=F 상관관계가 높아 추가 신호 가치 낮음
+- 현재 NASDAQ AND VIX 방식이 더 명확한 위험 기준 제공
+- 09:00 KST API 응답 지연 위험 감소
 
 ---
 
-### 개선 3: Telegram Regime 알림 업데이트
+### Telegram 알림 (변경 없음)
 
-**추가 항목**:
-```
-S&P500선물(실시간): -0.82% ⚠️
-```
-
-**경고 조건**: `parseFloat(esFutChg) < -0.7` → ⚠️ 표시
+기존 `나스닥 전일:` + `VIX:` + `매크로 Regime조정:` 3줄 유지.
+(ES=F 항목 미추가)
 
 ---
 
@@ -96,58 +88,42 @@ S&P500선물(실시간): -0.82% ⚠️
 
 | 파일 | 수정 내용 |
 |------|-----------|
-| `swing_scanner_code.js` | 상수 추가, `fetchMacroIndicators` ES=F 조회, `getMarketRegime` OR 결합, Telegram 알림 |
+| `autostock_showmoneyv2_20260527_integrated.json` | `getMarketRegime` MACRO-A 블록 변경 |
 
-### 상수 추가
+### 실제 구현된 상수
 
 ```js
-// ===== 매크로 경제 Regime 상수 (2026-05-17 방식A) =====
-const NASDAQ_DOWN_THRESH = -0.01;  // 나스닥 전일 -1% 이하
-const SP500_DOWN_THRESH  = -0.007; // S&P500 선물 -0.7% 이하 (실시간, 나스닥과 OR 조합)
-const VIX_HIGH_THRESH    = 25;     // VIX 25 초과
+// ===== 매크로 경제 Regime 상수 =====
+const NASDAQ_DOWN_THRESH = -0.01; // 나스닥 전일 -1% 이하
+const VIX_HIGH_THRESH    = 25;    // VIX 25 초과
+// SP500_DOWN_THRESH 미사용 (ES=F 미구현)
 ```
 
-### 변경 함수
+### 변경된 함수
 
 | 함수 | 변경 내용 |
 |------|-----------|
-| `fetchMacroIndicators` | `Promise.all` 3개로 확장 (ES=F 추가), `esFutChg` 반환 |
-| `getMarketRegime` | `extMarketBear` OR 결합 로직, `regimeCache.esFutChg` 필드 추가 |
-| Telegram 알림 블록 | `S&P500선물(실시간):` 줄 추가 |
+| `getMarketRegime` | `bothMacroWeak` AND 결합 로직 (기존 각 독립 +1 → 동시 약세 시에만 +1) |
+| `fetchMacroIndicators` | 변경 없음 (나스닥 + VIX 2개 유지, ES=F 미추가) |
 
 ---
 
-## 4. 구현 순서
+## 4. 수용 기준 (Acceptance Criteria) — 변경 확정판
 
-1. `SP500_DOWN_THRESH` 상수 추가 (매크로 상수 블록)
-2. `fetchMacroIndicators` — ES=F 5분봉 조회 + `chartPreviousClose` 기준 변화율 계산
-3. `getMarketRegime` MACRO-A 블록 — `extMarketBear` OR 결합
-4. `regimeCache` — `esFutChg` 필드 추가
-5. Telegram 알림 — `S&P500선물(실시간):` 항목 + ⚠️ 경고
-
----
-
-## 5. 수용 기준 (Acceptance Criteria)
-
-| # | 기준 | 검증 방법 |
-|---|------|-----------|
-| AC-1 | `SP500_DOWN_THRESH = -0.007` 상수 정의됨 | 코드 리뷰 |
-| AC-2 | `fetchMacroIndicators`가 ES=F 5분봉을 `interval=5m&range=1d`로 조회 | 코드 리뷰 |
-| AC-3 | `chartPreviousClose` 기준 `esFutChg` 계산 후 반환값에 포함 | 코드 리뷰 |
-| AC-4 | `extMarketBear = NASDAQ OR ES=F` OR 결합, macroAdj 단 1회 증가 | 코드 리뷰 |
-| AC-5 | `regimeCache`에 `esFutChg` 필드 포함 | 코드 리뷰 |
-| AC-6 | Telegram 알림에 `S&P500선물(실시간):` 항목 출력 | 코드 리뷰 |
-| AC-7 | `-0.7%` 이하 시 ⚠️ 경고 표시 | 코드 리뷰 |
-| AC-8 | ES=F 데이터 로드 실패 시 `esFutChg=null` 유지, 차단 없이 통과 | 코드 리뷰 |
-| AC-9 | 기존 NASDAQ/VIX 판정 로직 영향 없음 | Gap 분석 |
+| # | 기준 | 상태 |
+|---|------|------|
+| AC-1 | `NASDAQ_DOWN_THRESH = -0.01`, `VIX_HIGH_THRESH = 25` 상수 정의됨 | ✅ |
+| AC-2 | 나스닥 AND VIX 동시 약세일 때만 `macroAdj = 1` | ✅ |
+| AC-3 | 나스닥 단독 약세 시 `macroAdj = 0` (한국 강세 보호) | ✅ |
+| AC-4 | VIX 단독 고조 시 `macroAdj = 0` | ✅ |
+| AC-5 | 매크로 데이터 로드 실패 시 기존 `regimeLevel` 유지 (차단 없이 통과) | ✅ |
+| ~~AC-ES=F~~ | ~~ES=F 실시간 조회~~ | ❌ 설계 변경으로 폐기 |
 
 ---
 
-## 6. 리스크 및 대응
+## 5. 리스크 및 대응
 
 | 리스크 | 가능성 | 대응 |
 |--------|--------|------|
-| Yahoo Finance ES=F 요청 실패 | 중 | try/catch + `null` fallback, 차단 없이 통과 |
-| `Promise.all` 하나 실패 시 전체 null | 중 | 기존 동일 패턴, 외부 catch가 보수적 fallback 보장 |
-| 5분봉 데이터 부재(거래 없는 시간대) | 저 | `esCloses.length > 0` 체크로 처리 |
-| 나스닥+ES=F 동시 하락 시 과도 억제 | 저 | OR 결합으로 macroAdj 최대 +1 보장 |
+| 나스닥+VIX 기준이 너무 보수적 (진짜 위험 놓침) | 저 | 실증 데이터 축적 후 임계값 재검토 |
+| Yahoo Finance 나스닥/VIX 조회 실패 | 중 | try/catch + 기존 regimeLevel 유지 |

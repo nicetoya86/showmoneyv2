@@ -140,13 +140,13 @@ const isETF = ETF_PROVIDERS.some(p => nm.toUpperCase().startsWith(p)) || nm.incl
 **대상**: `swing_scanner_code.js` — weeklyRecommendations 저장 시
 
 **현황**: 주간 최대 10건 (5일 × 2건/일)
-**변경**: 주간 5건 한도 (`MAX_WEEKLY_SENDS = 5`)
+**변경**: 주간 3건 한도 (`MAX_WEEKLY_SENDS = 3`) — 5건 계획 대비 추가 강화 (2026-05-17)
 
 **구현**:
 ```js
-const MAX_WEEKLY_SENDS = 5;
+const MAX_WEEKLY_SENDS = 3;  // 5→3 하향 (2026-05-17 정확도 향상)
 const thisWeekSends = weekDates.reduce((sum, d) => sum + (store.weeklyRecommendations[d]?.length || 0), 0);
-if (thisWeekSends >= MAX_WEEKLY_SENDS) return; // 주간 한도 초과 시 발송 안 함
+if (thisWeekSends >= MAX_WEEKLY_SENDS) return; // 주간 3건 한도 초과 시 발송 안 함
 ```
 
 ---
@@ -193,7 +193,7 @@ const ETF_EXCLUDE_KEYWORDS = ['채권혼합', '채권형', '혼합형', '커버�
 const ETF_PROVIDERS = ['KODEX', 'TIGER', 'KBSTAR', 'ACE', 'SOL', 'HANARO', 'TIME', 'ARIRANG', 'KOSEF', 'MASTER', 'TIMEFOLIO'];
 const ETF_SCORE_PENALTY = 15;         // ETF rankScore 패널티
 const MIN_SCORE_IMPROVED = 100;       // 개선된 최소 점수 기준 (80→100)
-const MAX_WEEKLY_SENDS = 5;           // 주간 최대 추천 건수
+const MAX_WEEKLY_SENDS = 3;  // 5→3 하향 (2026-05-17 정확도 향상)           // 주간 최대 추천 건수
 const MAX_ETF_PER_SEND = 1;           // 1회 발송 ETF 최대 1건
 const MAX_STOCK_PER_SEND = 1;         // 1회 발송 개별주 최대 1건
 const INTRADAY_STOP_THRESHOLD = 2;    // 당일 손절 카운터 임계값
@@ -236,6 +236,6 @@ const CORRELATION_GROUPS = [
 | AC-2 | 동일주차 동일 상관그룹 ETF는 1건만 발송됨 | 코드 리뷰 |
 | AC-3 | 코스피/코스닥 개별주가 주간 리포트에 최소 1건 이상 포함 가능 | 실행 로그 |
 | AC-4 | ETF rankScore에 -15점 패널티 적용됨 | 코드 리뷰 |
-| AC-5 | 주간 발송 누적이 5건 초과 시 발송 없음 | 코드 리뷰 |
+| AC-5 | 주간 발송 누적이 3건 초과 시 발송 없음 (5→3 강화, 2026-05-17) | 코드 리뷰 |
 | AC-6 | 미도달 종목의 이후 3일 가격이 weeklyRecommendations에 저장됨 | 코드 리뷰 |
 | AC-7 | 당일 손절 카운터 ≥ 2면 신규 발송 없음 | 코드 리뷰 |
