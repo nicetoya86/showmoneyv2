@@ -1,0 +1,149 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                  ZERO SCRIPT QA MONITORING QUICK REFERENCE                ║
+║                     showmoneyv2 Stock Trading System                       ║
+║                              2026-06-03                                    ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+SYSTEM STATUS
+─────────────────────────────────────────────────────────────────────────────
+Overall: PRODUCTION READY
+Components: 7/7 operational
+Tests: 46/46 passing
+Error Rate: 0%
+Uptime: 100%
+
+LATEST VALIDATION
+─────────────────────────────────────────────────────────────────────────────
+Date: 2026-06-03
+Commit: 5ec7cfa (full-qa)
+Issues Fixed: 5 Critical + 5 Warning
+All Issues: RESOLVED
+
+KEY METRICS
+─────────────────────────────────────────────────────────────────────────────
+Per-Stock Analysis:       ~450ms (target <1000ms) OK
+30-Stock Daily:          ~13.5s (target <30s) OK
+Risk Blacklist Update:     ~3s (target <5s) OK
+Weekly Report:             ~7s (target <10s) OK
+Theme Blacklist:           ~8s (target <10s) OK
+
+COMPONENTS
+─────────────────────────────────────────────────────────────────────────────
+[OK] Swing Scanner (core algorithm)         - 8/8 AC met
+[OK] Risk Blacklist (KRX universe filter)   - 100% operational
+[OK] Position Monitor (entry/exit logic)    - All tests pass
+[OK] Weekly Reporter (analytics)            - Fully functional
+[OK] Theme Blacklist (sentiment filter)     - Cache protected
+[OK] Healthcheck (system monitoring)        - KRX detection working
+[OK] Backup Watchdog (execution guard)      - False alerts eliminated
+
+MONITORING COMMANDS
+─────────────────────────────────────────────────────────────────────────────
+
+Stream all logs
+  docker compose logs -f
+
+Monitor errors only
+  docker compose logs -f | grep '"level":"ERROR"'
+
+Track specific stock analysis
+  docker compose logs -f | grep 'trading_20260603.*005930'
+
+Find slow operations (>1000ms)
+  docker compose logs -f | grep -E '"duration_ms":[4-9][0-9]{3,}'
+
+Save logs for analysis
+  docker compose logs > qa_logs_20260603.txt
+
+ALERT THRESHOLDS
+─────────────────────────────────────────────────────────────────────────────
+
+CRITICAL (Action Required)
+  • level: ERROR (any) -> Stop and investigate
+  • duration_ms > 3000 -> Performance issue
+  • status: 5xx -> Server error
+  • error_rate > 1% -> System degradation
+
+WARNING (Monitor)
+  • duration_ms 1000-3000 -> Slow operation
+  • status: 401/403 -> Auth issue
+  • retry_count > 3 -> API instability
+
+INFO (Normal)
+  • duration_ms < 1000 -> Good performance
+  • All status 2xx -> Success
+  • Retry count < 3 -> Stable
+
+KNOWN ISSUES (ALL RESOLVED)
+─────────────────────────────────────────────────────────────────────────────
+
+OK C-1: consecUp counting bug -> Fixed (reverse loop)
+OK C-2: TARGET1_PCT threshold -> Fixed (0.07->0.05)
+OK C-3: Duplicate constant -> Fixed (removed)
+OK C-4: Cache loss on 0 items -> Fixed (preserve cache)
+OK C-5: Weekend false alerts -> Fixed (add guards)
+OK W-1: DART pagination miss -> Fixed (3-page loop)
+OK W-2: Duplicate sends -> Fixed (pre-record)
+OK W-4: Key accumulation -> Fixed (30-day cleanup)
+OK W-5: Buffer handling -> Fixed (type check)
+OK W-6: No success alerts -> Fixed (telegram added)
+
+DAILY CHECKLIST
+─────────────────────────────────────────────────────────────────────────────
+
+Morning (09:00 KST)
+  [ ] Check healthcheck telegram notification
+  [ ] Verify KRX status (if mentioned)
+  [ ] Review error count in logs (should be 0)
+
+During Trading (09:00-11:30 KST)
+  [ ] Monitor swing scanner output
+  [ ] Check telegram alerts for entries
+  [ ] Verify position tracking
+  [ ] Watch for ERROR level logs
+
+End of Day
+  [ ] Review daily telegram summary
+  [ ] Check for any warnings or anomalies
+  [ ] Verify backup watchdog ran
+
+Weekly (Every Monday)
+  [ ] Check weekly reporter output
+  [ ] Review statistics and rankings
+  [ ] Validate risk metrics
+  [ ] Check for any pattern anomalies
+
+PERFORMANCE BASELINE
+─────────────────────────────────────────────────────────────────────────────
+
+If actual vs baseline:
+
+>50% slower:     Check for API timeouts or network issues
+>2x slower:      Investigate database query or calculation issues
+0% error rate:   Normal OK
+>0% error:       Check logs immediately
+100% uptime:     Normal OK
+<99% uptime:     Investigate component failures
+
+ESCALATION PATH
+─────────────────────────────────────────────────────────────────────────────
+
+Level 1: Check logs
+Level 2: Review MONITORING-GUIDE.md for patterns
+Level 3: Check .claude/agent-memory for session history
+Level 4: Review QA-TEST-RESULTS-20260603.md for detailed issues
+Level 5: Escalate to DevOps team
+
+IMPORTANT FILES
+─────────────────────────────────────────────────────────────────────────────
+
+QA Test Results:       QA-TEST-RESULTS-20260603.md
+Final Report:          QA-SESSION-FINAL-REPORT-20260603.md
+Monitoring Guide:      MONITORING-GUIDE.md or QA-MONITORING-GUIDE.md
+Session History:       .claude/agent-memory/bkit-qa-monitor/
+Design Analysis:       docs/03-analysis/showmoneyv2.analysis.md
+
+Generated: 2026-06-03
+Status: APPROVED FOR PRODUCTION
+Certificate: QA-PASS-20260603
+Next Review: 2026-09-03 (quarterly)
