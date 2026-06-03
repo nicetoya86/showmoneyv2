@@ -1045,7 +1045,7 @@ const run = async function () {
   };
 
   // 전일 거래일 날짜 계산 (주말/공휴일 제외) — 장중 당일을 endDate로 쓰면 Naver API가 빈 배열 반환
-  const getPrevTradingDay = () => {
+  const getNaverPrevDay = () => {
     let d = new Date(Date.now() + 9 * 3600000 - 24 * 3600000);
     for (let i = 0; i < 10; i++) {
       const dow = d.getUTCDay();
@@ -1055,7 +1055,7 @@ const run = async function () {
     }
     return new Date(Date.now() + 9 * 3600000 - 24 * 3600000).toISOString().slice(0, 10).replace(/-/g, '');
   };
-  const prevTradingDay = getPrevTradingDay(); // e.g. '20260226'
+  const prevTradingDay = getNaverPrevDay(); // e.g. '20260226'
 
   // 응답 배열을 chart 포맷으로 변환
   const respToChart = (resp, t) => {
