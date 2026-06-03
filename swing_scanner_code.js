@@ -12,8 +12,10 @@ const run = async function () {
   const DART_API_KEY = '34a9b090d2a7b1ee689a240fef68667d36b389e7';
   const ALERT_START_HOUR   = 9;
   const ALERT_START_MINUTE = 0;
-  const STOP_NEW_ALERTS_HOUR = 11;
-  const STOP_NEW_ALERTS_MINUTE = 30;
+  const STOP_NEW_ALERTS_HOUR = 13;    // 전체 종료 (A/B/D 패턴)
+  const STOP_NEW_ALERTS_MINUTE = 0;
+  const STOP_C_HOUR = 11;             // 패턴C(촉매) 전용 종료 시각
+  const STOP_C_MINUTE = 30;           // 패턴C는 11:30 이후 추격 위험
   const MAX_STOCK_PER_SEND   = 3;    // 1회 최대 발송 종목 수
   const MAX_WEEKLY_SENDS     = 15;   // 주간 최대 추천 건수 (일 3건 × 5일 기준)
   const INTRADAY_STOP_THRESH = 2;    // 당일 손절 카운터: 2회 이상 손절 시 당일 신규 발송 억제
@@ -1344,6 +1346,11 @@ const run = async function () {
         );
 
         if (!isPatternA && !isPatternB && !isPatternC && !isPatternD) return;
+
+        // ---- [시간 게이트] 패턴C: 11:30 이후 추격 차단 ----
+        if (isPatternC && !isPatternA && !isPatternB && !isPatternD) {
+          if (h > STOP_C_HOUR || (h === STOP_C_HOUR && m >= STOP_C_MINUTE)) return;
+        }
 
         // ---- [S] 스코어링 ----
         let score = 0;
