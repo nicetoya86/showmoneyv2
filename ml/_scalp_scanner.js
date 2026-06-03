@@ -3,8 +3,7 @@ const run = async function () {
   const CHAT = '523002062';
   const MIN_PRICE = 1000;
   const MIN_INTRADAY_TURNOVER = 1000000000;
-  const MIN_SCORE = 70;
-  const MAX_INTRADAY_SENDS = 6;
+  const MAX_INTRADAY_SENDS = 2; // 1회 최대 발송 종목 수 (초기화)
   const HOLIDAYS = ['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-04-30','2026-05-05','2026-05-25','2026-06-06','2026-08-15','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-12-25'];
   const DUPLICATE_WINDOW_MINUTES = 60;
   const STOP_NEW_ALERTS_HOUR = 15;
@@ -284,44 +283,30 @@ const run = async function () {
         const vwapValues = vwap(high30m, low30m, close30m, vol30m);
         const currentVWAP = vwapValues[vwapValues.length - 1];
         
+        // ===== TODO: 종목 필터 및 스코어링 =====
+        // 새 조건을 아래에 정의하세요.
+        // ● 사용 가능한 데이터:
+        //   currentPrice, prevClose, dailyChange, dailyOpen
+        //   closeD, highD, lowD, volD (일봉 배열, dIdx = 오늘)
+        //   sma20_d, sma60_d (SMA20 / SMA60)
+        //   close30m, high30m, low30m, vol30m (30분봉 배열, iIdx = 최신)
+        //   ema20_30, ema50_30 (30분봉 EMA20 / EMA50)
+        //   currentVWAP (당일 누적 VWAP)
+        //   todayVol, avgDailyVol (당일 거래량 / 일평균 거래량)
+        //   hitalkScoreSetups(closeD, highD, lowD, volD, idx) → { pUP, pMAT }
+        // ● 필터 차단: return;
+        // ● 점수 추가: score += 값; signals.push('설명');
+        // ===== /TODO =====
+
         let score = 0;
         const signals = [];
-        
-        const dailyUptrend = (sma20_d[dIdx] > sma60_d[dIdx]);
-        if (!dailyUptrend) return;
-        score += 15; signals.push('일봉정배열');
-
-        const volSurge = todayVol >= avgDailyVol * 2.5;
-        if (volSurge) { score += 30; signals.push('거래량폭증(2.5x)'); }
-        const volatilityBreakout = currentPrice > (dailyOpen + (prevHigh - prevLow) * 0.5);
-        if (volatilityBreakout) { score += 25; signals.push('변동성돌파'); }
-        const vwapSupport = (currentPrice > currentVWAP) && (currentPrice > currentVWAP * 1.01);
-        if (vwapSupport) { score += 20; signals.push('VWAP지지'); }
-        const emaUp = (ema20_30[iIdx] > ema50_30[iIdx]);
-        if (emaUp) { score += 15; signals.push('30분EMA정배열'); }
-        
-        if (score < MIN_SCORE) return;
-        
         let type = '단타';
-        if (volSurge && volatilityBreakout) type = '단타/급등';
-        
         const entry = currentPrice;
-        let targetRate = 0.05;
-        let stopRate = 0.03;
-
-        // HiTalk setup scoring (UP=단타/급등 스타일)
-        const featIdx = Math.max(60, Math.min((idxToday >= 0 ? idxToday : dIdx), closeD.length - 1));
-        const setup = hitalkScoreSetups(closeD, highD, lowD, volD, featIdx);
-        const pUP = setup.pUP;
-        const pMAT = setup.pMAT;
-        // 급등(UP) 확률이 낮으면 후보에서 제외
-        if (pUP < HITALK_SETUP_CFG.UP.threshold) return;
-        // 목표/손절을 UP 통계 기반으로 보정(장중이므로 상한 제한)
-        targetRate = Math.min(HITALK_SETUP_CFG.UP.targetRate, 0.12);
-        stopRate = Math.min(HITALK_SETUP_CFG.UP.stopRate, 0.06);
-        const predType = '급등';
-        const predProb = pUP;
-        const rankScore = (pUP * 100) + score;
+        let targetRate = 0.05;  // TODO: 목표 수익률 재정의
+        let stopRate = 0.03;    // TODO: 손절 비율 재정의
+        const rankScore = score;
+        const predType = 'N/A';
+        const predProb = 0;
 
         
         const target = entry * (1 + targetRate);

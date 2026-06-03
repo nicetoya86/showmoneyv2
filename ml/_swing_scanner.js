@@ -3,8 +3,7 @@ const run = async function () {
   const CHAT = '523002062';
   const MIN_PRICE = 1000;
   const MIN_INTRADAY_TURNOVER = 1000000000;
-  const MIN_SCORE = 70;
-  const MAX_INTRADAY_SENDS = 4;
+  const MAX_INTRADAY_SENDS = 2; // 1회 최대 발송 종목 수 (초기화)
   const HOLIDAYS = ['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-04-30','2026-05-05','2026-05-25','2026-06-06','2026-08-15','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-12-25'];
   const DUPLICATE_WINDOW_MINUTES = 60;
   const STOP_NEW_ALERTS_HOUR = 15;
@@ -257,40 +256,27 @@ const run = async function () {
         const sma60_d = sma(closeD, 60);
         const dIdx = closeD.length - 1;
         
+        // ===== TODO: 종목 필터 및 스코어링 =====
+        // 새 조건을 아래에 정의하세요.
+        // ● 사용 가능한 데이터:
+        //   currentPrice, prevClose, dailyChange
+        //   closeD, highD, lowD (일봉 배열, dIdx = 오늘)
+        //   sma20_d, sma60_d (SMA20 / SMA60)
+        //   close30m (30분봉 배열)
+        //   hitalkScoreSetups(closeD, highD, lowD, volD, idx) → { pUP, pMAT }
+        // ● 필터 차단: return;
+        // ● 점수 추가: score += 값; signals.push('설명');
+        // ===== /TODO =====
+
         let score = 0;
         const signals = [];
-        
-        const dailyUptrend = (sma20_d[dIdx] > sma60_d[dIdx]);
-        if (!dailyUptrend) return;
-        score += 15; signals.push('일봉정배열');
-
-        const recent20High = Math.max(...highD.slice(dIdx-20, dIdx));
-        const boxBreakout = currentPrice > recent20High;
-        if (boxBreakout) { score += 35; signals.push('박스권돌파(20일)'); }
-        
-        const recent10High = Math.max(...highD.slice(dIdx-10, dIdx));
-        const nPattern = (recent10High > currentPrice * 1.15) && (Math.abs(currentPrice - sma20_d[dIdx]) / currentPrice < 0.03);
-        if (nPattern) { score += 40; signals.push('N자형눌림목'); }
-        
-        if (score < MIN_SCORE) return;
-        
-        let type = '스윙';
+        const type = '스윙';
         const entry = currentPrice;
-        let targetRate = 0.15;
-        let stopRate = 0.05;
-
-        // HiTalk setup scoring (MAT=스윙/재료 스타일)
-        const featIdx = Math.max(60, Math.min((idxToday >= 0 ? idxToday : dIdx), closeD.length - 1));
-        const setup = hitalkScoreSetups(closeD, highD, lowD, (qD.volume || []).map(Number).filter(v => v>=0), featIdx);
-        const pUP = setup.pUP;
-        const pMAT = setup.pMAT;
-        // 재료(MAT) 확률이 낮으면 후보에서 제외
-        if (pMAT < HITALK_SETUP_CFG.MAT.threshold) return;
-        targetRate = Math.min(HITALK_SETUP_CFG.MAT.targetRate, 0.25);
-        stopRate = Math.min(HITALK_SETUP_CFG.MAT.stopRate, 0.10);
-        const predType = '재료';
-        const predProb = pMAT;
-        const rankScore = (pMAT * 100) + score;
+        let targetRate = 0.10;  // TODO: 목표 수익률 재정의
+        let stopRate = 0.05;    // TODO: 손절 비율 재정의
+        const rankScore = score;
+        const predType = 'N/A';
+        const predProb = 0;
 
         
         const target = entry * (1 + targetRate);

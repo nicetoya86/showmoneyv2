@@ -1,0 +1,34 @@
+const store = this.getWorkflowStaticData('global');
+const bl = store.blacklist || {};
+const sm = store.swingMeta || {};
+const hc = store.healthcheck || {};
+
+return [{
+  json: {
+    blacklist: {
+      riskCodesCount: (bl.riskCodes || []).length,
+      riskUpdatedAt: bl.riskUpdatedAt || null,
+      riskCacheAge: bl.riskUpdatedAt
+        ? Math.round((Date.now() - new Date(bl.riskUpdatedAt).getTime()) / 60000) + 'min ago'
+        : 'never',
+      riskLastError: bl.riskLastError || null,
+      themeCodesCount: (bl.themeCodes || []).length,
+      themeUpdatedAt: bl.themeUpdatedAt || null,
+      themeFilterMode: bl.themeFilterMode || 'on',
+    },
+    swingMeta: {
+      lastRunDate: sm.lastRunDate || null,
+      lastRunAt: sm.lastRunAt || null,
+      watchdogDate: sm.watchdogDate || null,
+      weeklyCount: sm.weeklyCount || 0,
+      weeklyStartDate: sm.weeklyStartDate || null,
+      sentToday: (sm.sentTickers || []).length,
+    },
+    healthcheck: {
+      lastSentDate: hc.lastSentDate || null,
+      lastKrxStatus: hc.lastKrxStatus || null,
+      lastKrxCount: hc.lastKrxCount || 0,
+    },
+    exportedAt: new Date().toISOString(),
+  }
+}];
