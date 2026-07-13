@@ -3,7 +3,10 @@ const run = async function () {
   const CHAT = '523002062';
   const MIN_INTRADAY_TURNOVER = 3000000000; // 30억 KRW
   const MIN_PRICE = 1000;                   // 최소 주가 (프레임워크 — KRX API 필터)
-  const ETF_EXCLUDE_KEYWORDS = [];          // 제외 ETF 키워드 (초기화 — 새 조건에서 재정의)
+  const ETF_EXCLUDE_KEYWORDS = [            // ETF/펀드/리츠 제외 키워드 (2026-07-01)
+    'KODEX','TIGER','KBSTAR','HANARO','ACE','ARIRANG','SOL','TIMEFOLIO','KOSEF',
+    '리츠','펀드',
+  ];
   const HOLIDAYS = ['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06','2026-07-17','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
   const DUPLICATE_WINDOW_MINUTES = 480;
   const ACCOUNT_KRW = 10000000;
@@ -891,8 +894,9 @@ const run = async function () {
         };
         const body = `bld=dbms/MDC/STAT/standard/MDCSTAT01501&mktId=ALL&trdDd=${trdDd}&share=1&money=1&csvxls_isNo=false`;
         const r = await http({ method: 'POST', url: 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd', headers, body, json: true });
-        rows = (r && (r.output || r.OutBlock_1 || [])) || [];
-        if (rows.length > 0) {
+        const krxRows = (r && (r.output || r.OutBlock_1 || [])) || [];
+        if (krxRows.length > 0) {
+          rows = krxRows;
           krxUniverseSource = 'live';
           store.krxUniverseCache = {
             trdDd, fetchedAt: new Date(nowMs).toISOString(),
@@ -955,7 +959,7 @@ const run = async function () {
     const addFromMarket = async (sosok, mktNm) => {
       for (let p = 1; p <= MAX_PAGES; p++) {
         try {
-          const url = `https://finance.naver.com/sise/sise_quant.nhn?sosok=${sosok}&page=${p}`;
+          const url = `https://finance.naver.com/sise/sise_quant.naver?sosok=${sosok}&page=${p}`;
           const html = await fetchText(url);
           const pairs = extractCodeNamePairs(html);
           if (!pairs || pairs.length === 0) break;
@@ -997,6 +1001,8 @@ const run = async function () {
     const mkt = String(row.MKT_NM || '').toLowerCase();
 
     if (mkt.includes('konex') || mkt.includes('코넥스')) continue;
+    // [ETF-1] KRX MKT_NM 기반 ETF/ETN/ELW 시장 제외 (2026-07-01)
+    if (mkt.includes('etf') || mkt.includes('etn') || mkt.includes('elw')) continue;
 
     const price = Number((row.TDD_CLSPRC || '0').replace(/,/g, ''));
     const turnover = Number((row.ACC_TRDVAL || '0').replace(/,/g, ''));
@@ -1008,7 +1014,7 @@ const run = async function () {
     if (riskSet.has(rc)) { excludedRisk++; continue; }
     if (themeSet.has(rc)) { excludedTheme++; continue; }
 
-    // [QI-1] ETF 유형 필터: 채권혼합·커버드콜·레버리지·인버스 제외 (2026-05-09)
+    // [ETF-2] ETF 브랜드명·펀드·리츠 제외 (2026-07-01, 전 종목 적용)
     if (ETF_EXCLUDE_KEYWORDS.some(kw => nm.includes(kw))) continue;
 
     if (price < MIN_PRICE) continue;
@@ -1415,7 +1421,10 @@ const run = async function () {
         const atrAbs = calcAtrAbs(highD, lowD, dIdx, 14);
         const atrPct = atrAbs / currentPrice;
         let targetPct, stopPct;
-        if (isPatternC) {
+        if (isStrong) {
+          // 강매(110점+)는 패턴과 무관하게 전용 프로파일 적용 (docs/01-plan/features/showmoneyv2.plan.md §6)
+          targetPct = Math.max(0.10, atrPct * 1.9); stopPct = Math.max(0.04, atrPct * 1.0);
+        } else if (isPatternC) {
           targetPct = Math.max(0.10, atrPct * 1.8); stopPct = Math.max(0.04, atrPct * 0.9);
         } else if (isPatternA) {
           targetPct = Math.max(Math.abs(pullbackFromEvent) * 1.3 + 0.03, atrPct * 1.6, 0.08);
@@ -1559,6 +1568,16 @@ const run = async function () {
   let sendFailCount = 0;
   const sendFailSamples = [];
 
+  const getHoldDays = (c) => {
+    return (c.grade === '강매')          ? 5
+         : (c.grade === '급등')          ? 2
+         : (c.patternType === 'C촉매')   ? 2
+         : (c.patternType === 'A눌림목') ? 3
+         : (c.patternType === 'B지지선') ? 5
+         : (c.patternType === 'D박스')   ? 4
+         : 3;
+  };
+
   const send = async (c) => {
     const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
     const timeStr = String(kstNow.getUTCHours()).padStart(2, '0') + ':' + String(kstNow.getUTCMinutes()).padStart(2, '0');
@@ -1610,12 +1629,13 @@ const run = async function () {
     const pgmWarningLine = pgmCaution ? '⚠️ 프로그램 순매도 과다 — 반절매 주의' + NL : '';
     const atrPct = Number.isFinite(c.atrAbs) && c.entry > 0 ? (c.atrAbs / c.entry * 100) : 2.0;
     const trailingPct = Math.max(1.0, Math.min(atrPct, 3.0));
+    const holdDays = getHoldDays(c);
     const msg =
-      gradePrefix + '[당일단타] ' + c.market + '(' + typeLabel + ') | ' + displayName + '(' + c.code + ')' + NL +
+      gradePrefix + '[스윙] ' + c.market + '(' + typeLabel + ') | ' + displayName + '(' + c.code + ')' + NL +
       '등급: ' + (c.grade || '매수') + NL +
       '기준가: ' + to0(c.entry) + '원' + dailyChangeText + NL +
       '- 매수가: ' + to0(c.entry) + '원 (' + entryNote + ')' + NL +
-      '- 청산 목표: 당일 장마감 전 (최대 익일 오전)' + NL +
+      '- 보유기간: 최대 ' + holdDays + '거래일 (목표가/손절가 도달 시 조기 청산)' + NL +
       target1Line +
       '- 최종 목표: ' + to0(c.target) + '원 (+' + pct(c.target / c.entry - 1) + ')' + NL +
       '- 손절가: ' + to0(c.stop) + '원 (-' + pct(1 - c.stop / c.entry) + ')' + NL +
@@ -1670,13 +1690,7 @@ const run = async function () {
       if (!store.weeklyRecommendations) store.weeklyRecommendations = {};
       if (!store.weeklyRecommendations[today2]) store.weeklyRecommendations[today2] = [];
 
-      const holdDays = (selected[i].grade === '강매')                   ? 5
-                     : (selected[i].grade === '급등')                   ? 2
-                     : (selected[i].patternType === 'C촉매')            ? 2
-                     : (selected[i].patternType === 'A눌림목')          ? 3
-                     : (selected[i].patternType === 'B지지선')          ? 5
-                     : (selected[i].patternType === 'D박스')            ? 4
-                     : 3;
+      const holdDays = getHoldDays(selected[i]);
 
       store.weeklyRecommendations[today2].push({
         type: 'swing', subType: selected[i].type,
@@ -1748,6 +1762,17 @@ const run = async function () {
     if (store.scanLog.length > 20) store.scanLog.length = 20;
   } catch (_e) { /* 로그 저장 실패 무시 */ }
   // ===== /SCAN-LOG =====
+
+  // ===== [TOSS-RISK] 리스크 블랙리스트 토스 API 연동용 1차 필터 통과 종목 저장 (2026-07-10) =====
+  // Risk Blacklist Updater 노드가 다음날 08:30 갱신 시 이 목록으로 토스 /warnings 호출 대상을 한정한다.
+  // 참고: docs/02-design/features/risk-blacklist-toss-api.design.md §2.2
+  try {
+    store.lastFilteredUniverse = {
+      symbols: ALL_TICKERS.map((t) => t.slice(0, 6)),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (_e) { /* 저장 실패는 무시 — Risk Blacklist Updater가 Fail-Safe로 스킵 처리 */ }
+  // ===== /TOSS-RISK =====
 
   store.swingMeta._lastFullFinish = Date.now();
 
