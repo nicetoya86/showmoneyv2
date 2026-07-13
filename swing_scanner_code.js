@@ -614,6 +614,15 @@ const run = async function () {
   if (!store.swingSentToday[today]) store.swingSentToday[today] = [];
   if (!store.weeklyRecommendations[today]) store.weeklyRecommendations[today] = [];
 
+  // ===== [TOSS-CONFIRM] 임계값 튜닝용 상세 로그 저장소 (2026-07-14) =====
+  // tossConfirm() 평가마다 원본 지표·임계값·API 성공여부까지 기록 — 실거래 운영 중
+  // 스킵 사유/비율 분포를 나중에 분석해 TOSS_ASK_BID_BLOCK_RATIO, TOSS_WEAK_BUY_RATIO_C 튜닝
+  if (!store.tossConfirmLog) store.tossConfirmLog = {};
+  for (const dateKey in store.tossConfirmLog) {
+    if (dateKey < cutoffStr) delete store.tossConfirmLog[dateKey];
+  }
+  if (!store.tossConfirmLog[today]) store.tossConfirmLog[today] = [];
+
   // ===== [SCAN-LOG] 상세 스캔 로그 초기화 (2026-05-17) =====
   if (!store.scanLog) store.scanLog = [];
   const _log = {
@@ -1568,6 +1577,122 @@ const run = async function () {
   let sendFailCount = 0;
   const sendFailSamples = [];
 
+  // ===== [TOSS-CONFIRM] 발송 직전 토스 실시간 데이터로 최종 확인 (2026-07-14) =====
+  // 참고: developers.tossinvest.com (orderbook/trades/price-limits/stocks.warnings)
+  // Fail-Safe: store.tossApiKey 없거나 호출 실패 시 항상 통과 — 기존 발송 로직을 막지 않는다.
+  // 선정된 소수 후보(최대 MAX_STOCK_PER_SEND건)에만 호출하므로 rate limit 영향 미미.
+  const TOSS_API_BASE = 'https://openapi.tossinvest.com';
+  const TOSS_CONFIRM_TIMEOUT = 6000;
+  const TOSS_ASK_BID_BLOCK_RATIO = 1.5; // 매도잔량이 매수잔량의 1.5배 넘으면 발송 보류
+  const TOSS_WEAK_BUY_RATIO_C = 0.4;    // 패턴C 한정: 실시간 매수체결비율 40% 미만이면 발송 보류
+
+  const _tossApiKey = () => store.tossApiKey || '';
+
+  const fetchTossJSON = async (endpoint) => {
+    if (!_tossApiKey()) return null;
+    try {
+      const r = await http({
+        method: 'GET',
+        url: TOSS_API_BASE + endpoint,
+        json: true,
+        headers: { 'Authorization': 'Bearer ' + _tossApiKey(), 'Content-Type': 'application/json' },
+        timeout: TOSS_CONFIRM_TIMEOUT,
+      });
+      return (r && r.result !== undefined) ? r.result : r;
+    } catch (e) { return null; }
+  };
+
+  // VI_STATIC/VI_DYNAMIC/VI_STATIC_AND_DYNAMIC 활성 여부 (startDate~endDate 구간에 오늘 포함, endDate null=미해제)
+  const isViActive = (warnings) => {
+    if (!Array.isArray(warnings)) return false;
+    const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    return warnings.some((w) => {
+      if (!/^VI_/.test((w && w.warningType) || '')) return false;
+      const started = !w.startDate || w.startDate <= today;
+      const notEnded = !w.endDate || w.endDate >= today;
+      return started && notEnded;
+    });
+  };
+
+  // 체결 tick rule 근사치: Toss trades 응답엔 매수/매도 구분 필드가 없어 직전 체결가 대비
+  // 상승 체결 비중으로 매수세를 추정한다(공식 미제공 항목의 근사치임을 명시).
+  const estimateBuyRatio = (trades) => {
+    if (!Array.isArray(trades) || trades.length < 2) return null;
+    let buyVol = 0, totalVol = 0;
+    for (let i = 1; i < trades.length; i++) {
+      const p0 = Number(trades[i - 1].price), p1 = Number(trades[i].price);
+      const v1 = Number(trades[i].volume) || 0;
+      if (!Number.isFinite(p0) || !Number.isFinite(p1) || v1 <= 0) continue;
+      totalVol += v1;
+      if (p1 >= p0) buyVol += v1;
+    }
+    return totalVol > 0 ? buyVol / totalVol : null;
+  };
+
+  // 튜닝용 상세 기록 저장 + 구조화 로그 발행 (항상 호출 — 통과/차단 모두 기록)
+  const logTossConfirm = (c, record) => {
+    const entry = Object.assign({
+      time: new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString(),
+      ticker: c.ticker, code: c.code, grade: c.grade, patternType: c.patternType,
+      thresholds: { askBidBlockRatio: TOSS_ASK_BID_BLOCK_RATIO, weakBuyRatioC: TOSS_WEAK_BUY_RATIO_C },
+    }, record);
+    store.tossConfirmLog[today].push(entry);
+    logger.info(`Toss confirm evaluated: ${c.ticker}`, entry, requestId);
+  };
+
+  const tossConfirm = async (c) => {
+    const info = {
+      checked: false, viActive: false,
+      bidAskRatio: null, askTotal: null, bidTotal: null,
+      buyRatio: null, buySampleCount: 0,
+      upperLimitPct: null,
+    };
+    if (!_tossApiKey()) return { ok: true, info }; // Fail-Safe: 키 미설정 시 평가 자체를 스킵(로그 없음)
+
+    const [warnings, orderbook, trades, priceLimits] = await Promise.all([
+      fetchTossJSON('/api/v1/stocks/' + c.code + '/warnings'),
+      fetchTossJSON('/api/v1/orderbook?symbol=' + c.code),
+      fetchTossJSON('/api/v1/trades?symbol=' + c.code + '&count=50'),
+      fetchTossJSON('/api/v1/price-limits?symbol=' + c.code),
+    ]);
+    info.checked = true;
+    const apiOk = { warnings: warnings != null, orderbook: orderbook != null, trades: trades != null, priceLimits: priceLimits != null };
+
+    // ---- 지표는 항상 전부 계산 (어떤 조건이 차단했는지와 무관하게 튜닝용 원본 값 확보) ----
+    info.viActive = isViActive(warnings);
+
+    let askTotal = null, bidTotal = null;
+    if (orderbook && Array.isArray(orderbook.asks) && Array.isArray(orderbook.bids)) {
+      askTotal = orderbook.asks.reduce((s, a) => s + (Number(a.volume) || 0), 0);
+      bidTotal = orderbook.bids.reduce((s, b) => s + (Number(b.volume) || 0), 0);
+      info.askTotal = askTotal;
+      info.bidTotal = bidTotal;
+      if (askTotal > 0 || bidTotal > 0) info.bidAskRatio = bidTotal / Math.max(askTotal, 1);
+    }
+
+    const buyRatio = estimateBuyRatio(trades);
+    info.buyRatio = buyRatio;
+    info.buySampleCount = Array.isArray(trades) ? trades.length : 0;
+
+    if (priceLimits && Number.isFinite(Number(priceLimits.upperLimitPrice)) && c.entry > 0) {
+      info.upperLimitPct = (Number(priceLimits.upperLimitPrice) - c.entry) / c.entry;
+    }
+
+    // ---- 차단 판정 (우선순위: VI > 호가매도우위 > 패턴C 매수체결비율저조) ----
+    let ok = true, reason = null;
+    if (info.viActive) {
+      ok = false; reason = 'VI 발동 중';
+    } else if (askTotal != null && bidTotal != null && askTotal > bidTotal * TOSS_ASK_BID_BLOCK_RATIO) {
+      ok = false; reason = '호가 매도우위(매도잔량이 매수잔량의 ' + TOSS_ASK_BID_BLOCK_RATIO + '배 이상)';
+    } else if (c.patternType === 'C촉매' && buyRatio != null && buyRatio < TOSS_WEAK_BUY_RATIO_C) {
+      ok = false; reason = '실시간 매수체결비율 저조(' + (buyRatio * 100).toFixed(0) + '%)';
+    }
+
+    logTossConfirm(c, { ok, reason, apiOk, info });
+    return { ok, reason, info };
+  };
+  // ===== /TOSS-CONFIRM =====
+
   const getHoldDays = (c) => {
     return (c.grade === '강매')          ? 5
          : (c.grade === '급등')          ? 2
@@ -1579,6 +1704,9 @@ const run = async function () {
   };
 
   const send = async (c) => {
+    // tossConfirm() 내부에서 이미 store.tossConfirmLog + logger.info로 상세 기록을 남긴다
+    const confirm = await tossConfirm(c);
+    if (!confirm.ok) return null;
     const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
     const timeStr = String(kstNow.getUTCHours()).padStart(2, '0') + ':' + String(kstNow.getUTCMinutes()).padStart(2, '0');
 
@@ -1630,6 +1758,12 @@ const run = async function () {
     const atrPct = Number.isFinite(c.atrAbs) && c.entry > 0 ? (c.atrAbs / c.entry * 100) : 2.0;
     const trailingPct = Math.max(1.0, Math.min(atrPct, 3.0));
     const holdDays = getHoldDays(c);
+    const tossInfo = confirm.info;
+    const tossConfirmLine = tossInfo.checked
+      ? ('실시간 확인(Toss): 호가매수비 ' + (Number.isFinite(tossInfo.bidAskRatio) ? tossInfo.bidAskRatio.toFixed(2) : 'N/A') +
+         ' · 체결매수비 ' + (Number.isFinite(tossInfo.buyRatio) ? (tossInfo.buyRatio * 100).toFixed(0) + '%' : 'N/A') +
+         (Number.isFinite(tossInfo.upperLimitPct) ? ' · 상한가 ' + pct(tossInfo.upperLimitPct) + ' 남음' : '') + NL)
+      : '';
     const msg =
       gradePrefix + '[스윙] ' + c.market + '(' + typeLabel + ') | ' + displayName + '(' + c.code + ')' + NL +
       '등급: ' + (c.grade || '매수') + NL +
@@ -1644,6 +1778,7 @@ const run = async function () {
       pgmWarningLine +
       'ATR(14): ' + (Number.isFinite(c.atrAbs) ? (to0(c.atrAbs) + '원') : 'N/A') + NL +
       '- 점수: ' + c.score + '점' + NL +
+      tossConfirmLine +
       '핵심 시그널: ' + (c.signals.slice(0, 3).join(', ') || 'N/A');
 
     try {
@@ -1752,10 +1887,13 @@ const run = async function () {
       signals: (c.signals || []).slice(0, 6), isETF: !!c.isETF,
     }));
     _log.sent  = sent.slice();
+    const tossEvalsToday = store.tossConfirmLog[today] || [];
     _log.stats = {
       universe: ALL_TICKERS.length, candidates: candidates.length,
       sentCount: sent.length, excludedRisk, excludedTheme,
       naverOk: naverOkCount, naverNoResult: naverNoResultCount, naverErr: naverErrorCount,
+      tossConfirmChecked: tossEvalsToday.length,
+      tossConfirmBlocked: tossEvalsToday.filter(e => !e.ok).length,
     };
     _log.finishedAt = new Date().toISOString();
     store.scanLog.unshift(_log);
