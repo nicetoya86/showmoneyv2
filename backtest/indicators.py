@@ -57,7 +57,11 @@ def ema(arr: np.ndarray, window: int) -> np.ndarray:
 
 
 def rsi14(close: np.ndarray, idx: int) -> float:
-    """Port of swing-scanner.src.js `calcRSI14()` — simple (non-Wilder) rolling avg gain/loss."""
+    """Port of swing-scanner.src.js `calcRSI14()` (lines 106-125) — simple (non-Wilder) rolling avg gain/loss.
+
+    Period constants (line 107): period=14, lookback=period*3=42.
+    Uses simple average (not Wilder's smoothing) for gains and losses over period=14 bars.
+    """
     period = 14
     start = max(0, idx - period * 3)
     sl = close[start : idx + 1]
@@ -83,7 +87,12 @@ def rsi14(close: np.ndarray, idx: int) -> float:
 
 
 def adx(high: np.ndarray, low: np.ndarray, close: np.ndarray, idx: int, period: int = 14) -> dict:
-    """Port of swing-scanner.src.js `calcADX()`."""
+    """Port of swing-scanner.src.js `calcADX()` (lines 127-174).
+
+    Computes ADX (Average Directional Index) with +DI and -DI.
+    Period constant (line 127): period=14 (default).
+    Returns dict with keys: adx, plusDI, minusDI.
+    """
     need = period * 3 + 2
     start = max(0, idx - need)
     hi = high[start : idx + 1].astype("float64")
@@ -131,7 +140,12 @@ def adx(high: np.ndarray, low: np.ndarray, close: np.ndarray, idx: int, period: 
 
 
 def macd(close: np.ndarray, idx: int) -> dict:
-    """Port of swing-scanner.src.js `calcMACD()` — 12/26/9."""
+    """Port of swing-scanner.src.js `calcMACD()` (lines 191-215) — MACD(12/26/9) momentum indicator.
+
+    Period constants (lines 196-197, 202): fast EMA=12, slow EMA=26, signal EMA=9.
+    Returns dict with keys: macd, signal, hist, histPrev, goldenCross.
+    goldenCross=True when MACD line crosses from below to above signal line.
+    """
     nan = {"macd": float("nan"), "signal": float("nan"), "hist": float("nan"), "histPrev": float("nan"), "goldenCross": False}
     start = max(0, idx - 26 * 4)
     sl = close[start : idx + 1]
@@ -162,7 +176,12 @@ def macd(close: np.ndarray, idx: int) -> dict:
 
 
 def obv(close: np.ndarray, vol: np.ndarray, idx: int) -> dict:
-    """Port of swing-scanner.src.js `calcOBV()` — slope of last-5 vs prior-5 OBV average."""
+    """Port of swing-scanner.src.js `calcOBV()` (lines 237-259) — On-Balance Volume supply/demand indicator.
+
+    Uses slope of recent-5-bar OBV vs prior-5-bar OBV average to detect trend.
+    Slope thresholds (lines 256-257): >0.005 = buying pressure, <-0.005 = selling pressure.
+    Returns dict with key: obvTrend (1 = bullish, -1 = bearish, 0 = neutral).
+    """
     n = min(len(close), len(vol), idx + 1)
     if n < 20:
         return {"obvTrend": 0}
