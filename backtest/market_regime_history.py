@@ -87,7 +87,9 @@ def compute_regime_series(start: str, end: str) -> pd.DataFrame:
             adj += 1
         macro_adj[d] = adj
 
-    # Apply macro adjustment: vectorized clip applies same min(2, base + macro_adj) capping
-    # as _apply_macro_adjustment (scalar version tested separately)
-    regime_level = (base + macro_adj).clip(upper=2)
+    # Apply macro adjustment via the tested _apply_macro_adjustment function
+    regime_level = pd.Series(
+        [_apply_macro_adjustment(int(b), int(m)) for b, m in zip(base, macro_adj)],
+        index=base.index,
+    )
     return pd.DataFrame({"regime_level": regime_level})
