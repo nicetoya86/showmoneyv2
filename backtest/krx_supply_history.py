@@ -35,10 +35,17 @@ def fetch_supply_for_date(
     if cache_path.exists():
         return json.loads(cache_path.read_text(encoding="utf-8"))
 
-    body = f"bld=dbms/MDC/STAT/standard/MDCSTAT02023&mktId=ALL&trdDd={trd_dd}&share=1&money=1&csvxls_isNo=false"
-    resp = requests.post(_URL, headers=_HEADERS, data=body, timeout=20)
-    resp.raise_for_status()
-    rows = (resp.json() or {}).get("output") or []
+    try:
+        body = f"bld=dbms/MDC/STAT/standard/MDCSTAT02023&mktId=ALL&trdDd={trd_dd}&share=1&money=1&csvxls_isNo=false"
+        resp = requests.post(_URL, headers=_HEADERS, data=body, timeout=20)
+        resp.raise_for_status()
+        resp_data = resp.json() or {}
+        # Fall back to OutBlock_1 if output is missing/empty (matches production behavior)
+        rows = resp_data.get("output") or resp_data.get("OutBlock_1") or []
+    except Exception:
+        # On network error, timeout, or parse failure: return empty dict without caching
+        # This allows future retries for the same date rather than permanently caching failure
+        return {}
 
     result: Dict[str, Dict[str, float]] = {}
     for row in rows:
