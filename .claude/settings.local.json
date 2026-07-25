@@ -43,7 +43,32 @@
       "PowerShell(Get-ChildItem *)",
       "PowerShell($json = Get-Content \"D:\\\\vibecording\\\\showmoneyv2\\\\workflow_FINAL_20260502_prev_day_surge_filter.json\" -Raw | ConvertFrom-Json; $json.nodes | Select-Object name, type | Format-Table -AutoSize)",
       "PowerShell($files = Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\\\\backups\\\\\" -File | Sort-Object LastWriteTime -Descending; $files | Select-Object -First 3 | ForEach-Object { $_.FullName })",
-      "PowerShell(Test-Path \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260419_155609_merged.json\"; \\(Get-Item \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260419_155609_merged.json\" -ErrorAction SilentlyContinue\\).Length)"
+      "PowerShell(Test-Path \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260419_155609_merged.json\"; \\(Get-Item \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260419_155609_merged.json\" -ErrorAction SilentlyContinue\\).Length)",
+      "PowerShell(Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\" -File | Where-Object { $_.Name -notmatch \"\\\\.venv|node_modules\" } | Select-Object Name, Length | Sort-Object Length -Descending | Select-Object -First 30)",
+      "PowerShell(Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\" -File | Where-Object { $_.Extension -in '.py', '.js', '.txt', '.md', '.json' -and $_.Name -notmatch 'workflow_FINAL' } | Select-Object Name, Extension, Length | Sort-Object Length -Descending | Select-Object -First 20 | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\" -File | Where-Object { $_.Extension -in '.py', '.js', '.txt' -and $_.Name -notmatch 'workflow|autostock' } | Select-Object Name, Length | Sort-Object Length -Descending | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\" -File | Where-Object { $_.Name -match \"autostock\" } | Sort-Object LastWriteTime -Descending | Select-Object -First 5 | Select-Object Name, LastWriteTime | Format-Table -AutoSize)",
+      "PowerShell(Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\" -File | Where-Object { $_.Name -match \"autostock\" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1 | Select-Object Name)",
+      "Skill(bkit:zero-script-qa)",
+      "PowerShell(Get-ChildItem \"D:\\\\vibecording\\\\showmoneyv2\" | Where-Object { $_.Name -notmatch \"^\\(\\\\.venv|node_modules|mcp\\)$\" } | Select-Object Name, LastWriteTime | Format-Table -AutoSize)",
+      "PowerShell(netstat *)",
+      "PowerShell(Get-Date; \\(Get-Item \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260527_integrated.json\"\\).LastWriteTime)",
+      "PowerShell(claude mcp *)",
+      "mcp__n8n-cloud__n8n_ping",
+      "mcp__n8n-cloud__n8n_list_workflows",
+      "mcp__n8n-cloud__n8n_list_executions",
+      "mcp__n8n-cloud__n8n_get_execution",
+      "WebFetch(domain:query1.finance.yahoo.com)",
+      "WebFetch(domain:developers.tossinvest.com)",
+      "WebFetch(domain:openapi.tossinvest.com)",
+      "PowerShell(\\(Get-Content \"D:\\\\vibecording\\\\showmoneyv2\\\\cache\\\\swing_scanner_code.txt\"\\).Count)",
+      "mcp__n8n-cloud__n8n_get_workflow",
+      "PowerShell(\\(Get-Content \"D:\\\\vibecording\\\\showmoneyv2\\\\autostock_showmoneyv2_20260603_algo_v1_send3_time1300.json\" -Raw\\).Length)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.pulse-know.com)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "n8n"
+  ]
 }

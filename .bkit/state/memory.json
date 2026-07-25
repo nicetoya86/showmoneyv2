@@ -1,15 +1,17 @@
 {
-  "sessionCount": 73,
+  "sessionCount": 107,
   "lastSession": {
-    "startedAt": "2026-05-14T15:18:58.027Z",
+    "startedAt": "2026-07-25T05:20:16.861Z",
     "platform": "claude",
     "level": "Starter"
   },
-  "feature": "krx-healthcheck-fix",
-  "phase": "plan",
-  "matchRate": null,
-  "designCreatedAt": null,
-  "planCreatedAt": "2026-05-11",
-  "prevFeature": "swing-quality-improvement",
-  "prevMatchRate": 98
+  "feature": "risk-blacklist-toss-api",
+  "phase": "check",
+  "matchRate": 88,
+  "designCreatedAt": "2026-07-09",
+  "planCreatedAt": "2026-07-09",
+  "prevFeature": "showmoneyv2",
+  "prevMatchRate": 100,
+  "currentFeature": "risk-blacklist-toss-api",
+  "lastUpdated": "2026-07-09T15:28:29.418Z"
 }

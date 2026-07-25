@@ -1,0 +1,1295 @@
+{
+  "timestamp": "2026-05-26T16:45:04.970Z",
+  "reason": "compaction",
+  "status": {
+    "version": "2.0",
+    "lastUpdated": "2026-05-17T11:57:19.761Z",
+    "activeFeatures": [
+      "showmoneyv2",
+      "scripts",
+      "backtest"
+    ],
+    "primaryFeature": "showmoneyv2",
+    "features": {
+      "intraday-swing": {
+        "phase": "check",
+        "phaseNumber": 4,
+        "matchRate": 100,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {
+          "plan": "docs/01-plan/features/intraday-swing.plan.md",
+          "design": "docs/02-design/features/intraday-swing.design.md",
+          "analysis": "docs/03-analysis/intraday-swing.analysis.md"
+        },
+        "timestamps": {
+          "started": "2026-04-25T00:00:00.000Z",
+          "lastUpdated": "2026-04-25T14:00:00.000Z"
+        },
+        "lastFile": "D:\\vibecording\\showmoneyv2\\swing_scanner_code.js"
+      },
+      "swing-macd-rsi-risk-filter": {
+        "phase": "completed",
+        "phaseNumber": 5,
+        "matchRate": 100,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {
+          "plan": "docs/01-plan/features/swing-macd-rsi-risk-filter.plan.md",
+          "analysis": "docs/03-analysis/swing-macd-rsi-risk-filter.analysis.md",
+          "report": "docs/04-report/features/swing-macd-rsi-risk-filter.report.md"
+        },
+        "timestamps": {
+          "started": "2026-04-19T02:00:00.000Z",
+          "lastUpdated": "2026-04-19T08:00:00.000Z"
+        },
+        "lastFile": "D:\\vibecording\\showmoneyv2\\swing_scanner_code.js"
+      },
+      "showmoneyv2": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-08T15:02:20.792Z",
+          "lastUpdated": "2026-05-17T11:57:19.760Z"
+        },
+        "lastFile": "D:\\vibecording\\showmoneyv2\\swing_scanner_code.js",
+        "previousPhase": "check",
+        "autoAdvanced": true
+      },
+      "scripts": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-03-14T07:35:45.301Z",
+          "lastUpdated": "2026-03-30T13:55:05.738Z"
+        },
+        "lastFile": "D:/vibecording/showmoneyv2/scripts/patch_naver_resp_normalize.py"
+      },
+      "backtest": {
+        "phase": "do",
+        "phaseNumber": 3,
+        "matchRate": null,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {},
+        "timestamps": {
+          "started": "2026-04-19T06:37:56.243Z",
+          "lastUpdated": "2026-04-19T06:41:07.759Z"
+        },
+        "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\simulate_current.py"
+      },
+      "swing-nodup-fund-exclude": {
+        "phase": "check",
+        "phaseNumber": 4,
+        "matchRate": 100,
+        "iterationCount": 0,
+        "requirements": [],
+        "documents": {
+          "plan": "docs/01-plan/features/swing-nodup-fund-exclude.plan.md",
+          "implementation": "swing_scanner_code.txt",
+          "analysis": "docs/03-analysis/swing-nodup-fund-exclude.analysis.md"
+        },
+        "timestamps": {
+          "started": "2026-05-15T00:00:00.000Z",
+          "lastUpdated": "2026-05-15T00:40:00.000Z"
+        }
+      }
+    },
+    "pipeline": {
+      "currentPhase": 1,
+      "level": "Dynamic",
+      "phaseHistory": []
+    },
+    "session": {
+      "startedAt": "2026-03-08T14:53:57.237Z",
+      "onboardingCompleted": false,
+      "lastActivity": "2026-05-17T11:57:19.761Z"
+    },
+    "history": [
+      {
+        "timestamp": "2026-03-08T15:02:20.792Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:03:33.214Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:09:54.695Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:12:20.377Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:21:28.591Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-08T15:24:53.993Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T21:27:10.828Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-11T21:30:22.085Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:18:36.647Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:18:44.530Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:18:51.833Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-12T14:22:48.273Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-14T07:34:59.418Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-14T07:35:45.301Z",
+        "feature": "scripts",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-14T07:36:13.397Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-15T13:54:35.273Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-15T14:14:50.152Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-15T14:14:55.854Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-16T13:49:49.057Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-18T13:49:35.509Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-18T13:50:43.437Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:02.872Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:24.268Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:38.498Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:45.593Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T13:54:52.197Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T14:00:36.396Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-22T14:00:40.314Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:45:02.213Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:46:44.402Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:52:51.276Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-24T14:53:06.552Z",
+        "feature": "showmoneyv2",
+        "phase": "act",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:25:37.661Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:26:34.707Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:26:45.281Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:26:52.214Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:29:41.856Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T14:38:37.057Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:13:41.154Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:13:50.813Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:13:56.762Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:14:10.077Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:14:21.100Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:28:58.113Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:29:05.920Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:29:10.673Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:29:18.235Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T15:41:18.970Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T16:07:11.087Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-28T16:10:14.849Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-30T13:49:13.369Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-03-30T13:55:05.738Z",
+        "feature": "scripts",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:16:10.493Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:16:15.438Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:17:01.389Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:17:10.460Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:46:16.165Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:46:48.891Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:47:12.457Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:47:16.027Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:47:25.492Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:47:42.396Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:47:49.778Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:47:59.922Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:48:08.946Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:48:15.916Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:48:57.327Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:58:38.767Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-04T02:58:55.651Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:50:34.311Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:50:59.030Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:51:11.741Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:51:24.087Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:51:39.716Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:51:54.547Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:52:14.044Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:52:20.605Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:52:27.437Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:52:41.348Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T11:52:52.315Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:11:10.933Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:11:15.320Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:11:27.416Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:11:31.898Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:11:41.439Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:11:52.351Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:19:00.031Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:19:10.172Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:19:22.262Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:19:37.064Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:19:43.995Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T12:43:48.402Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T13:03:39.635Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T13:03:43.622Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T13:03:54.201Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T13:04:03.744Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-11T13:04:55.952Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T02:41:02.709Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T02:41:06.781Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T02:41:11.563Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T02:41:21.598Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T02:41:29.594Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T02:41:36.346Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T02:56:06.903Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:24:01.092Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:24:04.949Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:24:14.586Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:24:24.138Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:24:32.826Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:30:14.075Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:30:34.902Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:30:41.555Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:30:47.554Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:30:50.658Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:30:56.602Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:31:06.974Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:31:12.756Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:31:16.548Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:31:24.807Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:31:35.681Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:31:44.915Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:37:56.243Z",
+        "feature": "backtest",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:41:02.193Z",
+        "feature": "backtest",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:41:07.759Z",
+        "feature": "backtest",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:47:01.022Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T06:47:08.127Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-19T07:10:55.698Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-22T15:13:36.808Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-22T15:36:53.226Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-22T15:42:44.421Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-22T15:42:50.767Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-22T15:42:56.470Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-22T15:43:00.765Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:17:03.658Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:17:14.845Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:17:19.356Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:17:34.807Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:18:04.164Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:18:25.660Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:18:49.175Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:18:58.248Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:21:34.527Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:21:44.453Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:32:18.436Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:32:24.905Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-25T13:32:30.054Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-04-28T13:19:29.467Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T03:22:18.948Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T03:22:27.920Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T03:22:51.084Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T03:23:12.703Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T03:23:37.599Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T03:45:37.331Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T03:46:11.060Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T04:17:38.755Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T04:17:43.856Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-02T06:31:57.588Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-03T13:39:26.975Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-03T13:39:27.516Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-03T13:43:44.254Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-03T13:43:45.174Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-07T14:39:08.061Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-07T14:41:49.356Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:14:17.242Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:14:27.322Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:14:36.854Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:15:11.193Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:15:21.117Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:15:27.502Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:15:38.217Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:15:56.425Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:16:25.853Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:16:34.605Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:16:42.569Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:16:53.270Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:17:16.804Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:17:33.034Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:17:44.075Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:20:37.228Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-09T05:26:59.236Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-16T15:29:26.289Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-16T15:29:32.397Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-16T15:29:42.940Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-16T15:38:04.902Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-16T15:38:25.663Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-16T15:38:37.434Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-16T15:38:50.084Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T02:11:30.438Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T02:11:51.151Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T02:12:08.662Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T02:12:25.575Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T11:54:10.632Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T11:56:54.245Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T11:56:57.425Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T11:57:05.086Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      },
+      {
+        "timestamp": "2026-05-17T11:57:19.760Z",
+        "feature": "showmoneyv2",
+        "phase": "do",
+        "action": "updated"
+      }
+    ]
+  }
+}
