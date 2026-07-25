@@ -94,3 +94,49 @@ def test_fetch_supply_for_date_exception_from_parse_returns_empty_dict(tmp_path)
 
     # Verify cache file was NOT created
     assert not (cache_dir / "20240108.json").exists()
+
+
+def test_fetch_supply_for_date_empty_output_does_not_fallback(tmp_path):
+    """Test that output=[] does not fall back to OutBlock_1 (JS truthiness semantics).
+
+    In JS, [] is truthy, so [] || OutBlock_1 returns [].
+    In Python (without fix), [] is falsy, so [] or OutBlock_1 returns OutBlock_1.
+    This test ensures Python now matches JS: presence checking via is not None.
+    """
+    payload = {
+        "output": [],  # Empty but present
+        "OutBlock_1": [
+            {"ISU_SRT_CD": "005930", "FRGN_NETBUY_TRDVAL": "100", "ORG_NETBUY_TRDVAL": "200"},
+        ]
+    }
+    cache_dir = tmp_path / "krx_supply"
+    with patch("backtest.krx_supply_history.requests.post", return_value=_FakeResp(payload)):
+        result = fetch_supply_for_date("20240109", cache_dir=cache_dir)
+        # Should return empty dict (from empty output), not fallback to OutBlock_1
+        assert result == {}
+        # Cache should still be written (empty result is valid)
+        assert (cache_dir / "20240109.json").exists()
+        assert json.loads((cache_dir / "20240109.json").read_text()) == {}
+
+
+def test_fetch_supply_for_date_malformed_row_returns_empty_dict(tmp_path):
+    """Test that malformed rows during processing return empty dict without caching.
+
+    Exception scope should wrap the entire row-processing loop, not just the network call.
+    """
+    cache_dir = tmp_path / "krx_supply"
+
+    # Mock a response where rows is not a list (will fail when calling .get() on non-dict).
+    with patch("backtest.krx_supply_history.requests.post") as mock_post:
+        mock_resp = _FakeResp({})
+        # Return a response where output is a string, not a list.
+        # Iterating over it yields characters, and calling .get() on a char raises AttributeError.
+        mock_resp.json = lambda: {"output": "not-a-list"}
+        mock_post.return_value = mock_resp
+
+        result = fetch_supply_for_date("20240110", cache_dir=cache_dir)
+        # Should return empty dict (exception during row-loop .get() call)
+        assert result == {}
+
+    # Verify cache file was NOT created (exception = no cache)
+    assert not (cache_dir / "20240110.json").exists()

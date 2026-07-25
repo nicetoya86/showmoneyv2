@@ -40,24 +40,36 @@ def fetch_supply_for_date(
         resp = requests.post(_URL, headers=_HEADERS, data=body, timeout=20)
         resp.raise_for_status()
         resp_data = resp.json() or {}
-        # Fall back to OutBlock_1 if output is missing/empty (matches production behavior)
-        rows = resp_data.get("output") or resp_data.get("OutBlock_1") or []
+        # Fall back to OutBlock_1 only if output key is missing (not if empty).
+        # Use presence checking (is not None) to match JS truthiness: [] is truthy in JS.
+        rows = resp_data.get("output")
+        if rows is None:
+            rows = resp_data.get("OutBlock_1")
+        if rows is None:
+            rows = []
+
+        result: Dict[str, Dict[str, float]] = {}
+        for row in rows:
+            code = str(row.get("ISU_SRT_CD") or "").strip()
+            if not code:
+                continue
+            result[code] = {
+                "frgn": _to_num(row.get("FRGN_NETBUY_TRDVAL")),
+                "org": _to_num(row.get("ORG_NETBUY_TRDVAL")),
+            }
+
+        # Try to cache the result, but don't fail if cache write fails.
+        # Cache-write failure should not prevent returning successfully-fetched data.
+        try:
+            cache_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            # Cache write failed, but data is valid; let caller get the result anyway.
+            pass
+
+        if min_sleep_s > 0:
+            time.sleep(min_sleep_s)
+        return result
     except Exception:
-        # On network error, timeout, or parse failure: return empty dict without caching
-        # This allows future retries for the same date rather than permanently caching failure
+        # On network error, timeout, parse failure, or row-processing failure:
+        # return empty dict without caching, allowing future retries.
         return {}
-
-    result: Dict[str, Dict[str, float]] = {}
-    for row in rows:
-        code = str(row.get("ISU_SRT_CD") or "").strip()
-        if not code:
-            continue
-        result[code] = {
-            "frgn": _to_num(row.get("FRGN_NETBUY_TRDVAL")),
-            "org": _to_num(row.get("ORG_NETBUY_TRDVAL")),
-        }
-
-    cache_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-    if min_sleep_s > 0:
-        time.sleep(min_sleep_s)
-    return result

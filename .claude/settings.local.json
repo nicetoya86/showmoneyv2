@@ -70,5 +70,8 @@
   },
   "enabledMcpjsonServers": [
     "n8n"
-  ]
+  ],
+  "worktree": {
+    "baseRef": "head"
+  }
 }
