@@ -6,12 +6,23 @@ import pandas as pd
 from .indicators import sma
 from .yahoo_cache import YahooFetchSpec, chart_to_ohlcv_daily, fetch_yahoo_chart
 
+# Macro adjustment thresholds (src/swing-scanner.src.js:30, 32)
 NASDAQ_DOWN_THRESH = -0.01
-SP500_DOWN_THRESH = -0.007
+# SP500_DOWN_THRESH = -0.007  # Reserved/unused: ES=F futures data not fetched in this simplified reconstruction
 VIX_HIGH_THRESH = 25.0
 
 
 def _regime_level_for_index(i: int, sma5: np.ndarray, sma20: np.ndarray, sma60: np.ndarray) -> int:
+    """Classify regime level for a single bar based on SMA crossovers.
+
+    Returns 0 (bull), 1 (neutral), or 2 (bear) mirroring
+    src/swing-scanner.src.js:475-492 (KOSPI/KOSDAQ regime-level tiering block).
+
+    Rules:
+    - If SMA20 <= SMA60: return 2 (bear)
+    - Else if SMA5 <= SMA20: return 1 (neutral, short-term weakening)
+    - Else: return 0 (bull, all SMAs aligned upward)
+    """
     if not (np.isfinite(sma20[i]) and np.isfinite(sma60[i])):
         return 0
     if sma20[i] <= sma60[i]:
@@ -19,6 +30,21 @@ def _regime_level_for_index(i: int, sma5: np.ndarray, sma20: np.ndarray, sma60: 
     if np.isfinite(sma5[i]) and sma5[i] <= sma20[i]:
         return 1
     return 0
+
+
+def _apply_macro_adjustment(base_level: int, macro_adj: int) -> int:
+    """Apply macro adjustment to base SMA-derived regime level, capped at 2 (bear).
+
+    Mirrors src/swing-scanner.src.js:508-509 (Math.min(2, regimeLevel + macroAdj)).
+
+    Args:
+        base_level: Base regime level (0/1/2) from SMA analysis
+        macro_adj: Macro adjustment (+1 for NASDAQ down, +1 for high VIX, etc.)
+
+    Returns:
+        Adjusted regime level, clamped to [0, 2]
+    """
+    return min(2, base_level + macro_adj)
 
 
 def _single_index_regime(ticker: str, start: str, end: str) -> pd.Series:
@@ -33,7 +59,12 @@ def _single_index_regime(ticker: str, start: str, end: str) -> pd.Series:
 
 
 def compute_regime_series(start: str, end: str) -> pd.DataFrame:
-    """Daily regime_level (0=bull,1=neutral,2=bear) for KOSPI∪KOSDAQ + NASDAQ/VIX/ES=F macro overlay."""
+    """Daily regime_level (0=bull,1=neutral,2=bear) for KOSPI∪KOSDAQ + NASDAQ/VIX macro overlay.
+
+    Combines base SMA-derived regime for KOSPI and KOSDAQ with macro adjustments
+    from NASDAQ returns (src/swing-scanner.src.js:504-509) and VIX levels
+    (src/swing-scanner.src.js:30, 32, 507-509).
+    """
     ks = _single_index_regime("%5EKS11", start, end)
     kq = _single_index_regime("%5EKQ11", start, end)
     base = pd.concat([ks, kq], axis=1).max(axis=1).fillna(0).astype(int)
@@ -56,5 +87,7 @@ def compute_regime_series(start: str, end: str) -> pd.DataFrame:
             adj += 1
         macro_adj[d] = adj
 
+    # Apply macro adjustment: vectorized clip applies same min(2, base + macro_adj) capping
+    # as _apply_macro_adjustment (scalar version tested separately)
     regime_level = (base + macro_adj).clip(upper=2)
     return pd.DataFrame({"regime_level": regime_level})
