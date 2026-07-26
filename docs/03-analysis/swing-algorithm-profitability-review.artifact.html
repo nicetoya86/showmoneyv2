@@ -611,12 +611,13 @@
         any same-day disclosure, only ~2 matched a positive keyword) &mdash; expected given
         production's <code>page_count=100</code> pagination limit, not a bug.</li>
       <li><strong>Regime what-if reconstruction is directionally, not exactly, faithful</strong>
-        &mdash; besides the gap-detection simplification noted in Finding 1's panel above, the
-        macro overlay compares a Korean trading day to the <em>same-calendar-date</em> NASDAQ/VIX
-        close (the US session actually closes ~06:00 KST the <em>next</em> day), and
-        <code>SP500_DOWN_THRESH</code> &mdash; one of production's three macro triggers &mdash; is
-        commented out/unused in the reconstruction. Affects only the secondary what-if comparison,
-        whose "marginal effect" conclusion is robust to this.</li>
+        &mdash; the today-vs-yesterday gap-source switching in production's regime detection is
+        simplified here to pure SMA-based leveling; besides that, the macro overlay compares a
+        Korean trading day to the <em>same-calendar-date</em> NASDAQ/VIX close (the US session
+        actually closes ~06:00 KST the <em>next</em> day), and <code>SP500_DOWN_THRESH</code>
+        &mdash; one of production's three macro triggers &mdash; is commented out/unused in the
+        reconstruction. All three affect only the secondary what-if comparison, whose "marginal
+        effect" conclusion (Finding 1) is robust to them.</li>
       <li><strong>Drawdown/equity figures are illustrative, not a portfolio simulation</strong>
         &mdash; they compound all 1,202 trades sequentially in one account rather than modeling the
         up-to-3-concurrent-positions/day the algorithm actually allows. Treat win rate / avg PnL /
