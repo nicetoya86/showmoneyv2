@@ -144,6 +144,29 @@ Restoring the gate removes 127 trades (10.6% of the total) and leaves win rate a
 essentially unchanged (within ~0.1pp / ~0.03pp respectively). See Finding 1 for the
 interpretation of this result.
 
+### Entry-model comparison: naive vs. crude approximation vs. TOSS-aware + fee-aware
+
+| Entry model | Universe | Trades | Win rate | Avg PnL (net where noted) |
+|---|---|---|---|---|
+| Signal-day close (naive, original committed baseline) | 200 tickers, 2y | 1,202 | 40.68% | +0.886% (gross) |
+| Crude next-day-open approximation (same-session sensitivity check) | 200 tickers, 2y | 1,202 | 39.68% | +0.142% (gross) |
+| TOSS-LIVEPRICE-aware + fee-aware (this sub-project) | 959 tickers, 4y | 2,686 | 32.17% | -0.478% (net of ~0.2% round-trip cost) |
+
+Once entries are faithfully reconstructed from TOSS-LIVEPRICE (the price a real order would
+actually have filled at, not the signal-day close) and a realistic ~0.2% round-trip transaction
+cost is applied, the measured edge does not land between the naive and crude-approximation
+figures — it goes negative, at -0.478%/trade, further from both prior numbers than they are from
+each other. This is a reversal, not just an erosion: the naive baseline's +0.886% and the crude
+sensitivity check's +0.142% were both nominally profitable before costs; the TOSS-aware,
+fee-aware measurement is the first of the three to be tested against real fill prices and real
+costs, and it comes back negative. Read plainly, this backtest does not currently show a
+profitable edge once realistic entry pricing and transaction costs are included. Separately, the
+`mdd` (-99.99999953%) and `equity_end` (~4.9e-9) figures from this run reflect the same naive,
+single-account, 100%-capital-per-trade sequential-compounding equity model flagged elsewhere in
+this document (see Executive Summary / Limitations) — they describe what happens if one account
+sequentially bets its entire balance on every trade in a row, not a claim that a realistically
+diversified portfolio running this strategy would go to zero.
+
 ## Limitations
 
 - **Entry-fill model books the overnight gap as free profit — it does not simulate a
@@ -168,30 +191,6 @@ interpretation of this result.
   Exits still check daily high/low against target/stop under either entry model; this does not
   capture intraday order fills exactly the way the live 09:00-13:00 scanning cadence does (same
   caveat as `backtest/README.md`).
-
-### Entry-model comparison: naive vs. crude approximation vs. TOSS-aware + fee-aware
-
-| Entry model | Universe | Trades | Win rate | Avg PnL (net where noted) |
-|---|---|---|---|---|
-| Signal-day close (naive, original committed baseline) | 200 tickers, 2y | 1,202 | 40.68% | +0.886% (gross) |
-| Crude next-day-open approximation (same-session sensitivity check) | 200 tickers, 2y | 1,202 | 39.68% | +0.142% (gross) |
-| TOSS-LIVEPRICE-aware + fee-aware (this sub-project) | 959 tickers, 4y | 2,686 | 32.17% | -0.478% (net of ~0.2% round-trip cost) |
-
-Once entries are faithfully reconstructed from TOSS-LIVEPRICE (the price a real order would
-actually have filled at, not the signal-day close) and a realistic ~0.2% round-trip transaction
-cost is applied, the measured edge does not land between the naive and crude-approximation
-figures — it goes negative, at -0.478%/trade, further from both prior numbers than they are from
-each other. This is a reversal, not just an erosion: the naive baseline's +0.886% and the crude
-sensitivity check's +0.142% were both nominally profitable before costs; the TOSS-aware,
-fee-aware measurement is the first of the three to be tested against real fill prices and real
-costs, and it comes back negative. Read plainly, this backtest does not currently show a
-profitable edge once realistic entry pricing and transaction costs are included. Separately, the
-`mdd` (-99.99999953%) and `equity_end` (~4.9e-9) figures from this run reflect the same naive,
-single-account, 100%-capital-per-trade sequential-compounding equity model flagged elsewhere in
-this document (see Executive Summary / Limitations) — they describe what happens if one account
-sequentially bets its entire balance on every trade in a row, not a claim that a realistically
-diversified portfolio running this strategy would go to zero.
-
 - **No transaction costs modeled.** Neither deliverable includes Korean brokerage fees,
   증권거래세 (securities transaction tax), or slippage anywhere in the backtest. A realistic KRX
   round trip costs roughly 0.15-0.2% (sell-side transaction tax plus brokerage commission both
