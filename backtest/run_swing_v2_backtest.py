@@ -13,6 +13,8 @@ from .dart_history import fetch_disclosures_for_date
 from .indicators import max_drawdown
 from .krx_supply_history import fetch_supply_for_date
 from .simulate_exits import simulate_exit
+from .toss_liveprice import apply_toss_liveprice
+from .transaction_costs import apply_round_trip_cost
 from .swing_signal_engine import SwingCandidate, evaluate_candidate
 from .yahoo_cache import YahooFetchSpec, chart_to_ohlcv_daily, fetch_yahoo_chart
 
@@ -83,6 +85,7 @@ def backtest_swing_v2(
     trades: List[Dict[str, Any]] = []
     week_state: Dict[str, Any] = {"key": None, "count": 0, "codes": set()}
     code_to_ticker = {_code_of(t): t for t in tickers}
+    blocked_by_toss: List[Dict[str, str]] = []
 
     for day in all_days:
         week_key = _iso_week_key(day)
@@ -118,25 +121,37 @@ def backtest_swing_v2(
             entry_idx = int(df.index[df["timestamp_utc"] == day][0]) + 1
             if entry_idx >= len(df):
                 continue
+            next_day_open = float(df.iloc[entry_idx]["open"])
+            toss = apply_toss_liveprice(cand.entry, cand.target, cand.stop, next_day_open)
+            if toss.status in ("blocked_chasing", "blocked_stopped_out"):
+                blocked_by_toss.append({
+                    "date": day.isoformat(), "ticker": ticker, "code": code, "reason": toss.status,
+                })
+                continue
             sim = simulate_exit(
                 df, entry_idx,
-                entry=cand.entry, stop=cand.stop, target=cand.target, hold_days=cand.hold_days,
+                entry=toss.entry, stop=toss.stop, target=toss.target, hold_days=cand.hold_days,
             )
-            pnl = (float(sim["exit_price"]) - cand.entry) / cand.entry
+            gross_pnl = (float(sim["exit_price"]) - toss.entry) / toss.entry
+            pnl = apply_round_trip_cost(gross_pnl)
             trades.append({
                 "date": day.isoformat(), "ticker": ticker, "code": code,
                 "pattern_type": cand.pattern_type, "grade": cand.grade,
                 "score": cand.score, "rank_score": cand.rank_score,
-                "entry": cand.entry, "stop": cand.stop, "target": cand.target,
+                "entry": toss.entry, "stop": toss.stop, "target": toss.target,
                 "exit_price": float(sim["exit_price"]), "result": sim["result"],
                 "days_held": sim["days_held"], "pnl": pnl,
+                "gross_pnl": gross_pnl, "toss_status": toss.status,
             })
 
     df_trades = pd.DataFrame(trades)
     if df_trades.empty:
+        empty_stats: Dict[str, Any] = {"reason": "no_trades"}
         if skipped_tickers:
-            return df_trades, {"reason": "no_trades", "skipped_tickers": skipped_tickers}
-        return df_trades, {"reason": "no_trades"}
+            empty_stats["skipped_tickers"] = skipped_tickers
+        if blocked_by_toss:
+            empty_stats["blocked_by_toss"] = blocked_by_toss
+        return df_trades, empty_stats
 
     df_trades["date_ts"] = pd.to_datetime(df_trades["date"])
     df_trades = df_trades.sort_values(["date_ts", "code"]).reset_index(drop=True)
@@ -155,6 +170,7 @@ def backtest_swing_v2(
         "mdd": float(max_drawdown(equity_arr)),
         "equity_end": float(equity_arr[-1]),
         "skipped_tickers": skipped_tickers,
+        "blocked_by_toss": blocked_by_toss,
     }
     return df_trades, stats
 

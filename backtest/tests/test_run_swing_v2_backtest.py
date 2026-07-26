@@ -249,3 +249,96 @@ def test_backtest_swing_v2_skips_ticker_on_value_error_and_continues(monkeypatch
 
     captured = capsys.readouterr()
     assert captured.out.isascii()
+
+
+def test_backtest_swing_v2_blocks_trade_on_chasing_risk(monkeypatch):
+    import pandas as pd
+    from backtest import run_swing_v2_backtest as mod
+
+    ticker = "000001.KS"
+    # 3 daily bars: signal day (idx 1), next day (idx 2) whose OPEN already blows past
+    # a synthetic candidate's target -> must be blocked, not simulated/recorded.
+    df = pd.DataFrame({
+        "timestamp_utc": pd.to_datetime(
+            ["2024-01-02", "2024-01-03", "2024-01-04"], utc=True
+        ),
+        "open": [100.0, 200.0, 200.0],
+        "high": [101.0, 205.0, 205.0],
+        "low": [99.0, 195.0, 195.0],
+        "close": [100.0, 200.0, 200.0],
+        "volume": [1_000_000.0, 1_000_000.0, 1_000_000.0],
+    })
+
+    monkeypatch.setattr(
+        mod, "fetch_yahoo_chart", lambda spec: {"_fake_for": spec.ticker}
+    )
+    monkeypatch.setattr(
+        mod, "chart_to_ohlcv_daily", lambda data: (df.copy(), None)
+    )
+    monkeypatch.setattr(mod, "fetch_supply_for_date", lambda trd_dd: {})
+    monkeypatch.setattr(mod, "fetch_disclosures_for_date", lambda trd_dd, api_key: {})
+
+    from backtest.swing_signal_engine import SwingCandidate
+
+    def fake_evaluate_candidate(df_arg, idx, *, supply, dart_items, day_of_week):
+        if idx != 1:
+            return None
+        # entry=100 (signal day close), target=110 -> next day's open (200) blows past it
+        return SwingCandidate(
+            pattern_type="D박스", score=100, rank_score=100, grade="매수",
+            entry=100.0, target=110.0, stop=90.0, hold_days=3, signals=[],
+        )
+
+    monkeypatch.setattr(mod, "evaluate_candidate", fake_evaluate_candidate)
+
+    df_trades, stats = mod.backtest_swing_v2([ticker], start="2024-01-01", end="2024-01-05")
+
+    assert df_trades.empty or ticker not in df_trades.get("ticker", pd.Series(dtype=str)).values
+    assert stats.get("blocked_by_toss") or stats.get("reason") == "no_trades"
+    if "blocked_by_toss" in stats:
+        assert stats["blocked_by_toss"][0]["reason"] == "blocked_chasing"
+
+
+def test_backtest_swing_v2_records_toss_status_and_net_pnl(monkeypatch):
+    import pandas as pd
+    from backtest import run_swing_v2_backtest as mod
+
+    ticker = "000002.KS"
+    # signal day close=100 (idx 1), next day open=101 (idx 2, 1% gap -> as_is, no rebase),
+    # then a bar that hits the target so the trade resolves deterministically.
+    df = pd.DataFrame({
+        "timestamp_utc": pd.to_datetime(
+            ["2024-01-02", "2024-01-03", "2024-01-04"], utc=True
+        ),
+        "open": [100.0, 101.0, 101.0],
+        "high": [101.0, 102.0, 115.0],
+        "low": [99.0, 100.0, 100.0],
+        "close": [100.0, 101.0, 112.0],
+        "volume": [1_000_000.0, 1_000_000.0, 1_000_000.0],
+    })
+
+    monkeypatch.setattr(mod, "fetch_yahoo_chart", lambda spec: {"_fake_for": spec.ticker})
+    monkeypatch.setattr(mod, "chart_to_ohlcv_daily", lambda data: (df.copy(), None))
+    monkeypatch.setattr(mod, "fetch_supply_for_date", lambda trd_dd: {})
+    monkeypatch.setattr(mod, "fetch_disclosures_for_date", lambda trd_dd, api_key: {})
+
+    from backtest.swing_signal_engine import SwingCandidate
+
+    def fake_evaluate_candidate(df_arg, idx, *, supply, dart_items, day_of_week):
+        if idx != 1:
+            return None
+        return SwingCandidate(
+            pattern_type="D박스", score=100, rank_score=100, grade="매수",
+            entry=100.0, target=110.0, stop=90.0, hold_days=3, signals=[],
+        )
+
+    monkeypatch.setattr(mod, "evaluate_candidate", fake_evaluate_candidate)
+
+    df_trades, stats = mod.backtest_swing_v2([ticker], start="2024-01-01", end="2024-01-05")
+
+    assert stats["trades"] == 1
+    row = df_trades.iloc[0]
+    assert row["toss_status"] == "as_is"
+    assert row["result"] == "target"
+    assert abs(row["gross_pnl"] - 0.10) < 1e-9  # (110 - 100) / 100
+    assert abs(row["pnl"] - (0.10 - 0.002)) < 1e-9  # net of default 0.2% cost
