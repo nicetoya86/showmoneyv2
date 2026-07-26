@@ -33,6 +33,29 @@ def analyze(trades: List[dict]) -> Dict[str, Any]:
     return {"overall": overall, "by_pattern": by_pattern, "by_score_tier": by_score_tier}
 
 
+def _coerce_regime_level(value: Any) -> int:
+    """Coerce a regime_level cell to int, degrading gracefully instead of raising.
+
+    Handles:
+    - dict-shaped cells (e.g. {"regime_level": 1}, from a naive `pd.DataFrame({'regime_level':
+      regime_raw})` load of the nested `backtest_regime_series.json` shape) by extracting the
+      `regime_level` key first.
+    - NaN/None/otherwise non-coercible values by falling back to 0 (no block), matching the
+      existing behavior for a missing date.
+    """
+    if isinstance(value, dict):
+        value = value.get("regime_level", 0)
+    try:
+        if pd.isna(value):
+            return 0
+    except (TypeError, ValueError):
+        pass
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def regime_what_if(trades: List[dict], regime_df: pd.DataFrame) -> Dict[str, Any]:
     """Compares as-deployed (regime-blind) results against the lost production rule:
     `if regimeLevel>=2 and grade!='강매': block` and `if regimeLevel>=1 and grade=='매도차익': block`.
@@ -42,7 +65,7 @@ def regime_what_if(trades: List[dict], regime_df: pd.DataFrame) -> Dict[str, Any
     kept: List[dict] = []
     for t in trades:
         day = pd.Timestamp(t["date"]).date()
-        level = int(regime_df["regime_level"].get(day, 0))
+        level = _coerce_regime_level(regime_df["regime_level"].get(day, 0))
         if level >= 2 and t["grade"] != "강매":
             continue
         if level >= 1 and t["grade"] == "매도차익":

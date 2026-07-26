@@ -1,6 +1,7 @@
+import numpy as np
 import pandas as pd
 
-from backtest.analyze_swing_v2_results import analyze, regime_what_if
+from backtest.analyze_swing_v2_results import _coerce_regime_level, analyze, regime_what_if
 
 
 def _trades():
@@ -51,3 +52,55 @@ def test_regime_what_if_blocks_regime_level_2_non_strong_grade():
     # regime_level=2 blocks grade!='강매' (the 2024-01-02 trade), but '강매' survives the first condition
     # regime_level=0 on 2024-01-04 survives both conditions
     assert result["if_gate_active"]["trades"] == 2
+
+
+def test_coerce_regime_level_handles_dict_shaped_cell():
+    """A naive `pd.DataFrame({'regime_level': regime_raw})` load of the nested
+    backtest_regime_series.json shape (`{"2024-01-02...": {"regime_level": 1}, ...}`) produces a
+    column of dicts, not ints. The coercion guard must extract the nested value instead of
+    raising `TypeError: int() argument must be ... not 'dict'`."""
+    assert _coerce_regime_level({"regime_level": 2}) == 2
+    assert _coerce_regime_level({"regime_level": 0}) == 0
+
+
+def test_coerce_regime_level_handles_nan_and_none():
+    """NaN/None (and any other non-coercible value) must fall back to 0 (no block) -- the same
+    fallback behavior as a missing date via `.get(day, 0)` -- rather than raising."""
+    assert _coerce_regime_level(float("nan")) == 0
+    assert _coerce_regime_level(np.nan) == 0
+    assert _coerce_regime_level(None) == 0
+    assert _coerce_regime_level("not-a-number") == 0
+
+
+def test_regime_what_if_handles_dict_shaped_regime_column_without_raising():
+    """End-to-end: if regime_df['regime_level'] holds dicts (the exact failure mode from loading
+    backtest_regime_series.json with `pd.DataFrame({'regime_level': regime_raw})`), regime_what_if
+    must not raise, and must produce the same result as the correctly-typed int column."""
+    trades = _trades()
+    dates = ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
+    dict_regime_df = pd.DataFrame(
+        {"regime_level": [{"regime_level": 1}] * 4},
+        index=[pd.Timestamp(d).date() for d in dates],
+    )
+    int_regime_df = pd.DataFrame(
+        {"regime_level": [1, 1, 1, 1]},
+        index=[pd.Timestamp(d).date() for d in dates],
+    )
+    dict_result = regime_what_if(trades, dict_regime_df)
+    int_result = regime_what_if(trades, int_regime_df)
+    assert dict_result == int_result
+
+
+def test_regime_what_if_handles_nan_regime_cell_without_raising():
+    """A NaN cell (e.g. from a reindex/join gap) must fall back to '0 = no block', identical to
+    a date that's simply missing from the index."""
+    trades = _trades()
+    dates = ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
+    nan_regime_df = pd.DataFrame(
+        {"regime_level": [np.nan, np.nan, np.nan, np.nan]},
+        index=[pd.Timestamp(d).date() for d in dates],
+    )
+    empty_regime_df = pd.DataFrame({"regime_level": []}, index=[])
+    nan_result = regime_what_if(trades, nan_regime_df)
+    missing_result = regime_what_if(trades, empty_regime_df)
+    assert nan_result == missing_result
