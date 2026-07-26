@@ -14,8 +14,10 @@ def simulate_exit(
     target: float,
     hold_days: int,
 ) -> Dict[str, Any]:
-    """Day-by-day forward walk from entry_idx: exits on first target/stop touch, else at hold_days timeout."""
-    end = min(len(df) - 1, entry_idx + hold_days)
+    """Day-by-day forward walk from entry_idx: exits on first target/stop touch, else at
+    hold_days timeout. hold_days counts the entry day itself as day 1 (matches production's
+    "최대 N거래일" semantics) — hold_days=1 means only entry_idx is held."""
+    end = min(len(df) - 1, entry_idx + hold_days - 1)
     for i in range(entry_idx, end + 1):
         hi = float(df.iloc[i]["high"])
         lo = float(df.iloc[i]["low"])

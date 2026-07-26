@@ -39,7 +39,7 @@ def test_both_hit_same_day_is_conservative_stop():
     assert r["exit_price"] == 90.0
 
 
-def test_timeout_exits_at_close_of_last_holding_day():
+def test_timeout_exits_at_close_of_entry_day_when_hold_days_is_one():
     df = _df([
         [100, 101, 99, 100],
         [100, 105, 99, 103],
@@ -47,8 +47,8 @@ def test_timeout_exits_at_close_of_last_holding_day():
     ])
     r = simulate_exit(df, 1, entry=100.0, stop=50.0, target=200.0, hold_days=1)
     assert r["result"] == "timeout"
-    assert r["exit_price"] == 104.0  # close of entry_idx+hold_days
-    assert r["days_held"] == 1
+    assert r["exit_price"] == 103.0  # close of entry_idx itself — hold_days=1 counts the entry day
+    assert r["days_held"] == 0
 
 
 def test_timeout_clamps_to_last_row_when_data_runs_out():
