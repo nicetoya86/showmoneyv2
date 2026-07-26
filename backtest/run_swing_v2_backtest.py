@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+import requests
 
 from .dart_history import fetch_disclosures_for_date
 from .indicators import max_drawdown
@@ -62,11 +63,17 @@ def backtest_swing_v2(
     dart_api_key: str = DART_API_KEY,
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     per_ticker: Dict[str, pd.DataFrame] = {}
+    skipped_tickers: List[Dict[str, str]] = []
     for t in tickers:
-        data = fetch_yahoo_chart(YahooFetchSpec(ticker=t, range="5y", interval="1d"))
-        df, _ = chart_to_ohlcv_daily(data)
-        df = df.sort_values("timestamp_utc").reset_index(drop=True)
-        per_ticker[t] = df
+        try:
+            data = fetch_yahoo_chart(YahooFetchSpec(ticker=t, range="5y", interval="1d"))
+            df, _ = chart_to_ohlcv_daily(data)
+            df = df.sort_values("timestamp_utc").reset_index(drop=True)
+            per_ticker[t] = df
+        except requests.exceptions.RequestException as e:
+            print(f"WARNING: skipping ticker {t} — fetch failed: {e}")
+            skipped_tickers.append({"ticker": t, "error": str(e)})
+            continue
 
     start_ts = pd.to_datetime(start, utc=True)
     end_ts = pd.to_datetime(end, utc=True)
@@ -127,6 +134,8 @@ def backtest_swing_v2(
 
     df_trades = pd.DataFrame(trades)
     if df_trades.empty:
+        if skipped_tickers:
+            return df_trades, {"reason": "no_trades", "skipped_tickers": skipped_tickers}
         return df_trades, {"reason": "no_trades"}
 
     df_trades["date_ts"] = pd.to_datetime(df_trades["date"])
@@ -145,6 +154,7 @@ def backtest_swing_v2(
         "median_pnl": float(df_trades["pnl"].median()),
         "mdd": float(max_drawdown(equity_arr)),
         "equity_end": float(equity_arr[-1]),
+        "skipped_tickers": skipped_tickers,
     }
     return df_trades, stats
 
