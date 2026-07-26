@@ -75,6 +75,7 @@ def backtest_swing_v2(
 
     trades: List[Dict[str, Any]] = []
     week_state: Dict[str, Any] = {"key": None, "count": 0, "codes": set()}
+    code_to_ticker = {_code_of(t): t for t in tickers}
 
     for day in all_days:
         week_key = _iso_week_key(day)
@@ -104,7 +105,6 @@ def backtest_swing_v2(
                 todays_candidates.append((code, cand))
 
         selected = apply_daily_selection(todays_candidates, week_state)
-        code_to_ticker = {_code_of(t): t for t in tickers}
         for code, cand in selected:
             ticker = code_to_ticker[code]
             df = per_ticker[ticker]
@@ -131,6 +131,7 @@ def backtest_swing_v2(
 
     df_trades["date_ts"] = pd.to_datetime(df_trades["date"])
     df_trades = df_trades.sort_values(["date_ts", "code"]).reset_index(drop=True)
+    df_trades = df_trades.drop(columns=["date_ts"])  # Drop temp column before serialization
 
     equity = [1.0]
     for pnl in df_trades["pnl"].astype(float).tolist():
