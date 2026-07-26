@@ -70,7 +70,7 @@ def backtest_swing_v2(
             df, _ = chart_to_ohlcv_daily(data)
             df = df.sort_values("timestamp_utc").reset_index(drop=True)
             per_ticker[t] = df
-        except requests.exceptions.RequestException as e:
+        except (requests.exceptions.RequestException, ValueError) as e:
             print(f"WARNING: skipping ticker {t} - fetch failed: {e}")
             skipped_tickers.append({"ticker": t, "error": str(e)})
             continue

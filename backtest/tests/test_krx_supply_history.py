@@ -119,6 +119,30 @@ def test_fetch_supply_for_date_empty_output_does_not_fallback(tmp_path):
         assert json.loads((cache_dir / "20240109.json").read_text()) == {}
 
 
+def test_fetch_supply_for_date_corrupted_cache_falls_back_to_network(tmp_path):
+    """A truncated/corrupted cache file (e.g. left behind by an interrupted earlier run) must
+    not raise json.JSONDecodeError and kill the whole day-loop. It should be treated as a cache
+    miss and fall through to re-fetch from the network."""
+    cache_dir = tmp_path / "krx_supply"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    corrupted_path = cache_dir / "20240111.json"
+    corrupted_path.write_text('{"005930": {"frgn": 100.0, "org": 20', encoding="utf-8")  # truncated JSON
+
+    payload = {
+        "output": [
+            {"ISU_SRT_CD": "005930", "FRGN_NETBUY_TRDVAL": "1,000", "ORG_NETBUY_TRDVAL": "2,000"},
+        ]
+    }
+    with patch("backtest.krx_supply_history.requests.post", return_value=_FakeResp(payload)) as mock_post:
+        result = fetch_supply_for_date("20240111", cache_dir=cache_dir)
+        # Falls through to network fetch instead of raising.
+        assert result["005930"] == {"frgn": 1000.0, "org": 2000.0}
+        assert mock_post.call_count == 1
+
+    # Self-heals: the corrupted cache file is overwritten with valid JSON.
+    assert json.loads(corrupted_path.read_text(encoding="utf-8"))["005930"]["frgn"] == 1000.0
+
+
 def test_fetch_supply_for_date_malformed_row_returns_empty_dict(tmp_path):
     """Test that malformed rows during processing return empty dict without caching.
 

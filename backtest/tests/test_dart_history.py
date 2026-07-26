@@ -102,6 +102,30 @@ def test_fetch_disclosures_exception_from_parse_returns_empty_dict(tmp_path):
     assert not (cache_dir / "20240108.json").exists()
 
 
+def test_fetch_disclosures_corrupted_cache_falls_back_to_network(tmp_path):
+    """A truncated/corrupted cache file (e.g. left behind by an interrupted earlier run) must
+    not raise json.JSONDecodeError and kill the whole day-loop. It should be treated as a cache
+    miss and fall through to re-fetch from the network."""
+    cache_dir = tmp_path / "dart"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    corrupted_path = cache_dir / "20240112.json"
+    corrupted_path.write_text('{"005930": ["단일판매 공급', encoding="utf-8")  # truncated JSON
+
+    payload = {
+        "list": [
+            {"stock_code": "005930", "report_nm": "감사보고서제출"},
+        ]
+    }
+    with patch("backtest.dart_history.requests.get", return_value=_FakeResp(payload)) as mock_get:
+        result = fetch_disclosures_for_date("20240112", api_key="dummy", cache_dir=cache_dir)
+        # Falls through to network fetch instead of raising.
+        assert result["005930"] == ["감사보고서제출"]
+        assert mock_get.call_count == 1
+
+    # Self-heals: the corrupted cache file is overwritten with valid JSON.
+    assert json.loads(corrupted_path.read_text(encoding="utf-8"))["005930"] == ["감사보고서제출"]
+
+
 def test_fetch_disclosures_exception_from_row_processing_returns_empty_dict(tmp_path):
     """Test that malformed rows during processing return empty dict without caching.
 

@@ -33,7 +33,12 @@ def fetch_supply_for_date(
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{trd_dd}.json"
     if cache_path.exists():
-        return json.loads(cache_path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            # Corrupted/truncated cache file (e.g. from an interrupted earlier run):
+            # treat as a cache miss and fall through to re-fetch from the network.
+            pass
 
     try:
         body = f"bld=dbms/MDC/STAT/standard/MDCSTAT02023&mktId=ALL&trdDd={trd_dd}&share=1&money=1&csvxls_isNo=false"

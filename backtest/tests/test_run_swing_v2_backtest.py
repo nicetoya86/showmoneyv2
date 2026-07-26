@@ -179,3 +179,73 @@ def test_backtest_swing_v2_skips_failed_ticker_and_continues(monkeypatch, capsys
     assert warning_output.isascii(), (
         f"WARNING output contains non-ASCII characters and will fail on cp949: {repr(warning_output)}"
     )
+
+
+def test_backtest_swing_v2_skips_ticker_on_value_error_and_continues(monkeypatch, capsys):
+    """Widened fetch-resilience regression: `chart_to_ohlcv_daily` raises a plain
+    `ValueError("Yahoo chart: missing result")` on an HTTP-200-with-empty-result response
+    (e.g. a suspended or newly-listed ticker) -- this is NOT a `requests.exceptions.RequestException`
+    subclass. Before the fix, this ValueError would propagate out of backtest_swing_v2 and crash
+    the whole run, exactly like the original delisted-ticker bug. It must be caught the same way
+    the RequestException case is: logged, recorded in stats["skipped_tickers"], and the loop must
+    continue processing the other tickers."""
+    from backtest import run_swing_v2_backtest as mod
+
+    ok_ticker = "005930.KS"
+    bad_ticker = "999999.KS"
+
+    timestamps = [
+        pd.Timestamp("2024-01-01", tz="UTC").timestamp(),
+        pd.Timestamp("2024-01-02", tz="UTC").timestamp(),
+    ]
+    ok_chart = {
+        "chart": {
+            "result": [
+                {
+                    "timestamp": timestamps,
+                    "indicators": {
+                        "quote": [
+                            {
+                                "open": [100.0, 101.0],
+                                "high": [101.0, 102.0],
+                                "low": [99.0, 100.0],
+                                "close": [100.5, 101.5],
+                                "volume": [1_000_000, 1_000_000],
+                            }
+                        ]
+                    },
+                    "meta": {},
+                }
+            ]
+        }
+    }
+
+    def fake_fetch_yahoo_chart(spec):
+        if spec.ticker == bad_ticker:
+            # Mirrors chart_to_ohlcv_daily's real behavior for an HTTP-200-with-empty-result
+            # response: {"chart": {"result": None}} (or missing entirely).
+            return {"chart": {"result": None}}
+        return ok_chart
+
+    def fake_fetch_supply_for_date(trd_dd):
+        return {}
+
+    def fake_fetch_disclosures_for_date(trd_dd, *, api_key):
+        return {}
+
+    monkeypatch.setattr(mod, "fetch_yahoo_chart", fake_fetch_yahoo_chart)
+    monkeypatch.setattr(mod, "fetch_supply_for_date", fake_fetch_supply_for_date)
+    monkeypatch.setattr(mod, "fetch_disclosures_for_date", fake_fetch_disclosures_for_date)
+
+    # Must not raise: the bad ticker's ValueError (raised by the real chart_to_ohlcv_daily
+    # via mod.chart_to_ohlcv_daily) must be caught internally, same as a RequestException.
+    df_trades, stats = mod.backtest_swing_v2(
+        [ok_ticker, bad_ticker], start="2024-01-01", end="2024-01-02",
+    )
+
+    skipped = stats.get("skipped_tickers", [])
+    assert any(entry["ticker"] == bad_ticker for entry in skipped)
+    assert "missing result" in next(e["error"] for e in skipped if e["ticker"] == bad_ticker)
+
+    captured = capsys.readouterr()
+    assert captured.out.isascii()
