@@ -1,0 +1,567 @@
+<title>Swing Algorithm Profitability Review</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface-2: #f0eee7;
+    --border: rgba(11, 11, 11, 0.10);
+    --ink: #14120f;
+    --ink-2: #55524a;
+    --ink-3: #8b8679;
+    --accent: #9b6f1f;
+    --accent-ink: #6e4f16;
+    --good: #0ca30c;
+    --good-bg: rgba(12, 163, 12, 0.10);
+    --bad: #d03b3b;
+    --bad-bg: rgba(208, 59, 59, 0.09);
+    --warn: #b9790f;
+    --warn-bg: rgba(185, 121, 15, 0.10);
+    --grid: #e3e0d6;
+    --s1: #2a78d6; /* A눌림목 */
+    --s2: #eb6834; /* B지지선 */
+    --s3: #1baf7a; /* C촉매 */
+    --s4: #eda100; /* D박스 */
+    --shadow: 0 1px 2px rgba(20, 18, 15, 0.04), 0 8px 24px rgba(20, 18, 15, 0.05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #0d0d0c;
+      --surface: #171613;
+      --surface-2: #1e1c18;
+      --border: rgba(255, 255, 255, 0.09);
+      --ink: #f5f3ee;
+      --ink-2: #c3c2b7;
+      --ink-3: #83807a;
+      --accent: #d3a34a;
+      --accent-ink: #e8bd6f;
+      --good: #26c281;
+      --good-bg: rgba(38, 194, 129, 0.12);
+      --bad: #e66767;
+      --bad-bg: rgba(230, 103, 103, 0.12);
+      --warn: #e0a53a;
+      --warn-bg: rgba(224, 165, 58, 0.12);
+      --grid: #2c2a26;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --s3: #199e70;
+      --s4: #c98500;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0d0d0c;
+    --surface: #171613;
+    --surface-2: #1e1c18;
+    --border: rgba(255, 255, 255, 0.09);
+    --ink: #f5f3ee;
+    --ink-2: #c3c2b7;
+    --ink-3: #83807a;
+    --accent: #d3a34a;
+    --accent-ink: #e8bd6f;
+    --good: #26c281;
+    --good-bg: rgba(38, 194, 129, 0.12);
+    --bad: #e66767;
+    --bad-bg: rgba(230, 103, 103, 0.12);
+    --warn: #e0a53a;
+    --warn-bg: rgba(224, 165, 58, 0.12);
+    --grid: #2c2a26;
+    --s1: #3987e5;
+    --s2: #d95926;
+    --s3: #199e70;
+    --s4: #c98500;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface-2: #f0eee7;
+    --border: rgba(11, 11, 11, 0.10);
+    --ink: #14120f;
+    --ink-2: #55524a;
+    --ink-3: #8b8679;
+    --accent: #9b6f1f;
+    --accent-ink: #6e4f16;
+    --good: #0ca30c;
+    --good-bg: rgba(12, 163, 12, 0.10);
+    --bad: #d03b3b;
+    --bad-bg: rgba(208, 59, 59, 0.09);
+    --warn: #b9790f;
+    --warn-bg: rgba(185, 121, 15, 0.10);
+    --grid: #e3e0d6;
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --s3: #1baf7a;
+    --s4: #eda100;
+    --shadow: 0 1px 2px rgba(20, 18, 15, 0.04), 0 8px 24px rgba(20, 18, 15, 0.05);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono {
+    font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .page { max-width: 1180px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.top {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .top-inner {
+    max-width: 1180px; margin: 0 auto; padding: 14px 24px;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  .eyebrow {
+    font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 600;
+  }
+  .top-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; margin-right: auto; }
+  .verdict-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    background: var(--warn-bg); color: var(--warn);
+    font-size: 12.5px; font-weight: 700; letter-spacing: 0.01em;
+    border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+  }
+
+  .hero { padding: 44px 0 8px; }
+  h1 {
+    font-size: clamp(26px, 3.6vw, 38px);
+    line-height: 1.14; letter-spacing: -0.015em; margin: 0 0 12px;
+    text-wrap: balance; font-weight: 800;
+  }
+  .hero-sub {
+    max-width: 62ch; color: var(--ink-2); font-size: 15.5px; margin: 0 0 6px;
+  }
+  .hero-meta {
+    display: flex; gap: 18px; flex-wrap: wrap; margin-top: 18px;
+    font-size: 12.5px; color: var(--ink-3);
+  }
+  .hero-meta b { color: var(--ink-2); font-weight: 600; }
+
+  section { margin-top: 40px; }
+  .section-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+  }
+  h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--ink-3); font-weight: 700; margin: 0;
+  }
+  .section-note { font-size: 12.5px; color: var(--ink-3); }
+
+  /* stat tiles */
+  .stat-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .stat-label { font-size: 12px; color: var(--ink-3); font-weight: 600; margin-bottom: 8px; }
+  .stat-value { font-size: 25px; font-weight: 700; letter-spacing: -0.01em; }
+  .stat-value.good { color: var(--good); }
+  .stat-value.bad { color: var(--bad); }
+  .stat-flag {
+    display: inline-block; margin-top: 8px; font-size: 11px; color: var(--warn);
+    background: var(--warn-bg); padding: 2px 7px; border-radius: 5px; font-weight: 600;
+  }
+  .stat-sub { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+
+  /* card shell */
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 22px; box-shadow: var(--shadow);
+  }
+
+  .two-col { display: grid; grid-template-columns: 1.05fr 1.35fr; gap: 16px; }
+  @media (max-width: 860px) { .two-col, .stat-row { grid-template-columns: 1fr; } .stat-row { grid-template-columns: repeat(2, 1fr); } }
+
+  /* legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 12px 18px; margin-top: 14px; font-size: 12.5px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; color: var(--ink-2); }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  .donut-wrap { display: flex; align-items: center; gap: 22px; }
+  .donut-center-label { font-size: 11px; color: var(--ink-3); }
+  .donut-center-value { font-size: 22px; font-weight: 700; }
+
+  table.dtable { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.dtable th {
+    text-align: right; font-weight: 600; color: var(--ink-3); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.04em; padding: 0 0 8px; border-bottom: 1px solid var(--grid);
+  }
+  table.dtable th:first-child, table.dtable td:first-child { text-align: left; }
+  table.dtable td { padding: 8px 0; border-bottom: 1px solid var(--grid); }
+  table.dtable tr:last-child td { border-bottom: none; }
+  .pat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; }
+
+  /* score tier bars */
+  .tier-row { display: grid; grid-template-columns: 84px 1fr 150px; align-items: center; gap: 14px; padding: 10px 0; }
+  .tier-row + .tier-row { border-top: 1px solid var(--grid); }
+  .tier-name { font-size: 13px; font-weight: 700; }
+  .tier-bars { display: flex; flex-direction: column; gap: 5px; }
+  .bar-track { height: 8px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 5px; }
+  .tier-stats { text-align: right; font-size: 12.5px; }
+  .tier-stats .pnl { font-weight: 700; }
+
+  /* regime panel */
+  .regime-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 18px; align-items: center; }
+  .regime-col { text-align: center; }
+  .regime-col .k { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; margin-bottom: 10px; }
+  .regime-metric { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13px; border-top: 1px solid var(--grid); }
+  .regime-metric:first-of-type { border-top: none; }
+  .regime-metric .v { font-weight: 700; }
+  .regime-arrow { color: var(--ink-3); font-size: 20px; }
+  .delta-note {
+    grid-column: 1 / -1; margin-top: 4px; font-size: 12.5px; color: var(--ink-2);
+    background: var(--surface-2); border-radius: 8px; padding: 10px 14px;
+  }
+  @media (max-width: 700px) { .regime-grid { grid-template-columns: 1fr; } .regime-arrow { transform: rotate(90deg); } }
+
+  /* score composition */
+  .score-list { display: flex; flex-direction: column; gap: 7px; }
+  .score-row { display: grid; grid-template-columns: 150px 1fr 46px; align-items: center; gap: 10px; }
+  .score-label { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .score-track { height: 14px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+  .score-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .score-fill.neg { background: var(--bad); }
+  .score-val { font-size: 12.5px; text-align: right; font-weight: 600; color: var(--ink-2); }
+
+  /* findings */
+  .findings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .finding {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; box-shadow: var(--shadow);
+  }
+  .finding-top { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+  .finding-num {
+    width: 22px; height: 22px; border-radius: 6px; background: var(--surface-2);
+    color: var(--ink-2); font-size: 12px; font-weight: 700; display: flex;
+    align-items: center; justify-content: center; flex: none;
+  }
+  .finding-title { font-size: 13.5px; font-weight: 700; letter-spacing: -0.005em; }
+  .finding-body { font-size: 13px; color: var(--ink-2); }
+  .finding-tag {
+    display: inline-block; margin-top: 10px; font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.03em; text-transform: uppercase; padding: 2px 8px; border-radius: 5px;
+  }
+  .tag-neutral { background: var(--surface-2); color: var(--ink-3); }
+  .tag-warn { background: var(--warn-bg); color: var(--warn); }
+
+  footer {
+    margin-top: 52px; padding-top: 22px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--ink-3);
+  }
+  footer ul { margin: 10px 0 0; padding-left: 18px; }
+  footer li { margin-bottom: 6px; }
+  footer strong { color: var(--ink-2); }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <span class="eyebrow">Backtest Report</span>
+    <span class="top-title">swing-scanner.src.js — Profitability Review</span>
+    <span class="verdict-chip">● Marginal net-positive edge, concentrated in top score tier</span>
+  </div>
+</header>
+
+<div class="page">
+
+  <div class="hero">
+    <h1>A modest, real edge — carried almost entirely by 110+ scored trades</h1>
+    <p class="hero-sub">
+      Faithful Python port of the production swing-recommendation engine, backtested across
+      200 KRX tickers from 2024-01-01 to 2026-01-01. 1,202 trades generated, sorted by pattern,
+      score tier, and a reconstruction of a regime-blocking rule that has silently rotted into
+      dead code.
+    </p>
+    <div class="hero-meta">
+      <span><b>Universe</b> 200 KRX tickers (1 delisted, skipped)</span>
+      <span><b>Window</b> 2024-01-01 → 2026-01-01</span>
+      <span><b>Source</b> src/swing-scanner.src.js</span>
+      <span><b>Trades</b> 1,202</span>
+    </div>
+  </div>
+
+  <section>
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-label">Win rate</div>
+        <div class="stat-value mono">40.68%</div>
+        <div class="stat-sub">of 1,202 trades</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Avg PnL / trade</div>
+        <div class="stat-value good mono">+0.89%</div>
+        <div class="stat-sub">median −4.00%</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Max drawdown</div>
+        <div class="stat-value bad mono">−92.80%</div>
+        <div class="stat-flag">⚠ illustrative, not portfolio-real</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Equity end (1.0 start)</div>
+        <div class="stat-value mono">1855.16×</div>
+        <div class="stat-flag">⚠ single compounding account</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Trade Mix &amp; Score Quality</h2>
+      <span class="section-note">by_pattern / by_score_tier — backtest_analysis_swing_v2.json</span>
+    </div>
+    <div class="two-col">
+
+      <div class="card">
+        <div class="donut-wrap">
+          <svg width="150" height="150" viewBox="0 0 150 150" role="img" aria-label="Trade count share by pattern type">
+            <g transform="translate(75,75) rotate(-90)">
+              <circle r="56" fill="none" stroke="var(--s1)" stroke-width="22"
+                stroke-dasharray="103.36 248.50" stroke-dashoffset="0" />
+              <circle r="56" fill="none" stroke="var(--s2)" stroke-width="22"
+                stroke-dasharray="17.86 334.00" stroke-dashoffset="-103.36" />
+              <circle r="56" fill="none" stroke="var(--s3)" stroke-width="22"
+                stroke-dasharray="132.93 218.93" stroke-dashoffset="-121.22" />
+              <circle r="56" fill="none" stroke="var(--s4)" stroke-width="22"
+                stroke-dasharray="97.79 254.07" stroke-dashoffset="-254.15" />
+            </g>
+          </svg>
+          <div>
+            <div class="donut-center-label">Total trades</div>
+            <div class="donut-center-value mono">1,202</div>
+          </div>
+        </div>
+        <table class="dtable" style="margin-top:16px;">
+          <thead><tr><th>Pattern</th><th>Trades</th><th>Win %</th><th>Avg PnL</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pat-dot" style="background:var(--s1)"></span>A눌림목 (pullback)</td><td class="mono">353</td><td class="mono">40.79%</td><td class="mono">+0.62%</td></tr>
+            <tr><td><span class="pat-dot" style="background:var(--s2)"></span>B지지선 (support)</td><td class="mono">61</td><td class="mono">42.62%</td><td class="mono">+0.65%</td></tr>
+            <tr><td><span class="pat-dot" style="background:var(--s3)"></span>C촉매 (catalyst)</td><td class="mono">454</td><td class="mono">41.85%</td><td class="mono">+1.30%</td></tr>
+            <tr><td><span class="pat-dot" style="background:var(--s4)"></span>D박스 (box range)</td><td class="mono">334</td><td class="mono">38.62%</td><td class="mono">+0.65%</td></tr>
+          </tbody>
+        </table>
+        <div class="legend" style="margin-top:2px;">
+          <span class="legend-item">C촉매 has the strongest avg PnL and a top-two win rate — the strongest pattern in this sample.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="tier-row" style="padding-top:0;">
+          <div class="tier-name">60&ndash;89</div>
+          <div class="tier-bars">
+            <div class="bar-track"><div class="bar-fill" style="width:85%; background:var(--bad);"></div></div>
+            <div class="bar-track"><div class="bar-fill" style="width:67%; background:var(--bad);"></div></div>
+          </div>
+          <div class="tier-stats">
+            <div class="mono">40 trades · 35.00% win</div>
+            <div class="pnl mono" style="color:var(--bad);">&minus;0.69% avg</div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-name">90&ndash;109</div>
+          <div class="tier-bars">
+            <div class="bar-track"><div class="bar-fill" style="width:95%; background:var(--warn);"></div></div>
+            <div class="bar-track"><div class="bar-fill" style="width:37%; background:var(--warn);"></div></div>
+          </div>
+          <div class="tier-stats">
+            <div class="mono">168 trades · 39.29% win</div>
+            <div class="pnl mono" style="color:var(--warn);">+0.38% avg</div>
+          </div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-name">110+</div>
+          <div class="tier-bars">
+            <div class="bar-track"><div class="bar-fill" style="width:100%; background:var(--good);"></div></div>
+            <div class="bar-track"><div class="bar-fill" style="width:100%; background:var(--good);"></div></div>
+          </div>
+          <div class="tier-stats">
+            <div class="mono">994 trades · 41.15% win</div>
+            <div class="pnl mono" style="color:var(--good);">+1.03% avg</div>
+          </div>
+        </div>
+        <div class="legend">
+          <span class="legend-item"><span class="swatch" style="background:var(--ink-3)"></span>top bar = win rate, scaled to the highest tier (41.15%)</span>
+          <span class="legend-item"><span class="swatch" style="background:var(--ink-3)"></span>bottom bar = |avg PnL|, scaled to the largest magnitude (1.03%); 60&ndash;89's is negative</span>
+        </div>
+        <div class="delta-note">
+          Score is monotonic here: win rate and avg PnL both climb 60&ndash;89 → 90&ndash;109 → 110+.
+          The 110+ tier alone carries 994 of 1,202 trades (82.7%) and nearly all of the edge;
+          60&ndash;89 is the only net-losing tier.
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Regime Gate — Dead Code vs. Restored</h2>
+      <span class="section-note">regime_what_if — reconstructed from src/swing-scanner.src.js:403-530</span>
+    </div>
+    <div class="card">
+      <div class="regime-grid">
+        <div class="regime-col">
+          <div class="k">As deployed (regime-blind)</div>
+          <div class="regime-metric"><span>Trades</span><span class="v mono">1,202</span></div>
+          <div class="regime-metric"><span>Win rate</span><span class="v mono">40.68%</span></div>
+          <div class="regime-metric"><span>Avg PnL</span><span class="v mono">+0.89%</span></div>
+        </div>
+        <div class="regime-arrow">→</div>
+        <div class="regime-col">
+          <div class="k">If gate were restored</div>
+          <div class="regime-metric"><span>Trades</span><span class="v mono">1,075</span></div>
+          <div class="regime-metric"><span>Win rate</span><span class="v mono">40.56%</span></div>
+          <div class="regime-metric"><span>Avg PnL</span><span class="v mono">+0.92%</span></div>
+        </div>
+        <div class="delta-note">
+          Restoring the entry-blocking rule removes 127 trades (10.6%) and moves win rate/avg PnL
+          by only &minus;0.12pp / +0.03pp &mdash; within noise. The dead code is still worth fixing
+          on integrity grounds (see Finding 1), but this backtest window did not stress the
+          tail-risk case it exists to catch.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Scoring Composition</h2>
+      <span class="section-note">bonus/penalty constants — backtest/swing_signal_engine.py</span>
+    </div>
+    <div class="card">
+      <div class="score-list">
+        <div class="score-row"><div class="score-label">촉매이벤트 (catalyst)</div><div class="score-track"><div class="score-fill" style="width:100%"></div></div><div class="score-val mono">+60</div></div>
+        <div class="score-row"><div class="score-label">급등후눌림목 (surge+pullback)</div><div class="score-track"><div class="score-fill" style="width:83%"></div></div><div class="score-val mono">+50</div></div>
+        <div class="score-row"><div class="score-label">지지선반등 (support bounce)</div><div class="score-track"><div class="score-fill" style="width:75%"></div></div><div class="score-val mono">+45</div></div>
+        <div class="score-row"><div class="score-label">박스권돌파 (box breakout)</div><div class="score-track"><div class="score-fill" style="width:67%"></div></div><div class="score-val mono">+40</div></div>
+        <div class="score-row"><div class="score-label">52주신고가 (52w high)</div><div class="score-track"><div class="score-fill" style="width:42%"></div></div><div class="score-val mono">+25</div></div>
+        <div class="score-row"><div class="score-label">거래량8x+ (vol 8x+)</div><div class="score-track"><div class="score-fill" style="width:42%"></div></div><div class="score-val mono">+25</div></div>
+        <div class="score-row"><div class="score-label">OBV수급↑ (OBV uptrend)</div><div class="score-track"><div class="score-fill" style="width:33%"></div></div><div class="score-val mono">+20</div></div>
+        <div class="score-row"><div class="score-label">외국인+기관동반</div><div class="score-track"><div class="score-fill" style="width:33%"></div></div><div class="score-val mono">+20</div></div>
+        <div class="score-row"><div class="score-label">긍정공시 (positive DART)</div><div class="score-track"><div class="score-fill" style="width:33%"></div></div><div class="score-val mono">+20</div></div>
+        <div class="score-row"><div class="score-label">거래량5x</div><div class="score-track"><div class="score-fill" style="width:30%"></div></div><div class="score-val mono">+18</div></div>
+        <div class="score-row"><div class="score-label">복합A+B (combo bonus)</div><div class="score-track"><div class="score-fill" style="width:25%"></div></div><div class="score-val mono">+15</div></div>
+        <div class="score-row"><div class="score-label">MACD골든크로스</div><div class="score-track"><div class="score-fill" style="width:25%"></div></div><div class="score-val mono">+15</div></div>
+        <div class="score-row"><div class="score-label">일봉정배열 (SMA alignment)</div><div class="score-track"><div class="score-fill" style="width:25%"></div></div><div class="score-val mono">+15</div></div>
+        <div class="score-row"><div class="score-label">거래량3x</div><div class="score-track"><div class="score-fill" style="width:20%"></div></div><div class="score-val mono">+12</div></div>
+        <div class="score-row"><div class="score-label">장마감강세 (strong close)</div><div class="score-track"><div class="score-fill" style="width:20%"></div></div><div class="score-val mono">+12</div></div>
+        <div class="score-row"><div class="score-label">외국인순매수</div><div class="score-track"><div class="score-fill" style="width:20%"></div></div><div class="score-val mono">+12</div></div>
+        <div class="score-row"><div class="score-label">복합C+D (combo bonus)</div><div class="score-track"><div class="score-fill" style="width:17%"></div></div><div class="score-val mono">+10</div></div>
+        <div class="score-row"><div class="score-label">MACD↑</div><div class="score-track"><div class="score-fill" style="width:17%"></div></div><div class="score-val mono">+10</div></div>
+        <div class="score-row"><div class="score-label">ADX추세↑</div><div class="score-track"><div class="score-fill" style="width:17%"></div></div><div class="score-val mono">+10</div></div>
+        <div class="score-row"><div class="score-label">신고가근접 (near 52w high)</div><div class="score-track"><div class="score-fill" style="width:17%"></div></div><div class="score-val mono">+10</div></div>
+        <div class="score-row"><div class="score-label">기관순매수</div><div class="score-track"><div class="score-fill" style="width:13%"></div></div><div class="score-val mono">+8</div></div>
+        <div class="score-row"><div class="score-label">RSI골든존</div><div class="score-track"><div class="score-fill" style="width:13%"></div></div><div class="score-val mono">+8</div></div>
+        <div class="score-row"><div class="score-label">장마감양호</div><div class="score-track"><div class="score-fill" style="width:10%"></div></div><div class="score-val mono">+6</div></div>
+        <div class="score-row"><div class="score-label">거래량2x</div><div class="score-track"><div class="score-fill" style="width:10%"></div></div><div class="score-val mono">+6</div></div>
+        <div class="score-row"><div class="score-label">당일공시 (neutral DART)</div><div class="score-track"><div class="score-fill" style="width:8%"></div></div><div class="score-val mono">+5</div></div>
+        <div class="score-row"><div class="score-label">OBV하락 (OBV downtrend)</div><div class="score-track"><div class="score-fill neg" style="width:13%"></div></div><div class="score-val mono">&minus;8</div></div>
+      </div>
+      <div class="delta-note" style="margin-top:14px;">
+        Bar length is proportional to point value (bars scaled against the +60 maximum; the single
+        penalty renders in red against the same axis). Roughly 15 bonuses/penalties were hand-tuned
+        against a 30-stock hindsight review (Finding 3) &mdash; this backtest is their first
+        out-of-sample check.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Code Review Findings</h2>
+      <span class="section-note">from docs/03-analysis/swing-algorithm-profitability-review.analysis.md</span>
+    </div>
+    <div class="findings-grid">
+
+      <div class="finding">
+        <div class="finding-top"><div class="finding-num">1</div><div class="finding-title">Regime-blocking gate silently regressed to dead code</div></div>
+        <div class="finding-body">
+          <code>getMarketRegime()</code> computes a KOSPI/KOSDAQ + macro regime level, but the
+          entry-blocking check that once used it is gone from the current file &mdash; production
+          has been trading regime-blind while logs still imply the safety layer is active. Measured
+          impact this run: marginal (see Regime Gate panel above).
+        </div>
+        <span class="finding-tag tag-warn">Fix regardless of measured impact</span>
+      </div>
+
+      <div class="finding">
+        <div class="finding-top"><div class="finding-num">2</div><div class="finding-title">Two indicator implementations are dead code</div></div>
+        <div class="finding-body">
+          <code>calcBB()</code> (Bollinger Bands) and <code>detectCupAndHandle()</code> are fully
+          implemented but never called from candidate generation &mdash; maintenance surface with
+          zero effect on trading decisions.
+        </div>
+        <span class="finding-tag tag-neutral">Remove or wire up</span>
+      </div>
+
+      <div class="finding">
+        <div class="finding-top"><div class="finding-num">3</div><div class="finding-title">Scoring weights never statistically validated</div></div>
+        <div class="finding-body">
+          The ~15 bonuses/penalties above were set from a 30-stock hindsight review, not fit or
+          cross-validated against a larger dataset. This backtest is the first genuine
+          out-of-sample check they've received.
+        </div>
+        <span class="finding-tag tag-neutral">Re-tune from this backtest</span>
+      </div>
+
+      <div class="finding">
+        <div class="finding-top"><div class="finding-num">4</div><div class="finding-title">Pipeline is fragile under upstream data-format changes</div></div>
+        <div class="finding-body">
+          A Naver API normalization regression (missing BOM/Buffer/string-JSON handling) silently
+          zeroed 15 real recommendations in the weekly report this session. The same
+          <code>catch(e) { return null }</code> pattern appears throughout the candidate-generation
+          path.
+        </div>
+        <span class="finding-tag tag-warn">Audit remaining call sites</span>
+      </div>
+
+      <div class="finding">
+        <div class="finding-top"><div class="finding-num">5</div><div class="finding-title">Toss real-time order-book confirmation is unmeasured</div></div>
+        <div class="finding-body">
+          <code>tossConfirm()</code> blocks unfavorable-orderbook sends live; no historical
+          equivalent exists. It can only reduce trade count, so every number above is an upper
+          bound on trade frequency &mdash; live win rate is plausibly higher.
+        </div>
+        <span class="finding-tag tag-neutral">Out of scope for backtest</span>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <strong>Read this backtest with two caveats in mind:</strong>
+    <ul>
+      <li><strong>KRX supply data was unavailable all run</strong> &mdash; the foreign/institutional
+        net-buy endpoint returned HTTP 400 for every call in this environment (a known session/auth
+        limitation, handled gracefully, not a crash). Every trade above was generated from
+        price/volume/DART signals alone; supply-based bonuses and the negative-supply hard-block
+        never fired.</li>
+      <li><strong>Drawdown/equity figures are illustrative, not a portfolio simulation</strong>
+        &mdash; they compound all 1,202 trades sequentially in one account rather than modeling the
+        up-to-3-concurrent-positions/day the algorithm actually allows. Treat win rate / avg PnL /
+        median PnL as the primary signal of edge; treat &minus;92.80% MDD and 1855.16&times; equity
+        as an artifact of that simplification, not a real portfolio outcome.</li>
+    </ul>
+  </footer>
+
+</div>
