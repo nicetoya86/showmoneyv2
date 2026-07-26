@@ -49,3 +49,15 @@ def test_timeout_exits_at_close_of_last_holding_day():
     assert r["result"] == "timeout"
     assert r["exit_price"] == 104.0  # close of entry_idx+hold_days
     assert r["days_held"] == 1
+
+
+def test_timeout_clamps_to_last_row_when_data_runs_out():
+    df = _df([
+        [100, 101, 99, 100],
+        [100, 105, 99, 103],
+        [103, 106, 102, 104],
+    ])
+    r = simulate_exit(df, 0, entry=100.0, stop=50.0, target=200.0, hold_days=100)
+    assert r["result"] == "timeout"
+    assert r["exit_price"] == 104.0  # close of last available row (index 2)
+    assert r["days_held"] == 2  # 0 to 2 = 2 days
