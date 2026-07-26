@@ -98,11 +98,14 @@ def test_json_serialization_regression():
         raise
 
 
-def test_backtest_swing_v2_skips_failed_ticker_and_continues(monkeypatch):
+def test_backtest_swing_v2_skips_failed_ticker_and_continues(monkeypatch, capsys):
     """Resilience regression: one ticker's Yahoo fetch failing (e.g. a delisted symbol
     returning HTTP 404) must not abort the whole run. It should be logged, recorded in
     stats["skipped_tickers"], and the loop must continue processing the other tickers
-    instead of letting the exception propagate out of backtest_swing_v2."""
+    instead of letting the exception propagate out of backtest_swing_v2.
+
+    Also verifies that the warning message uses only ASCII characters to avoid
+    UnicodeEncodeError on cp949 and other limited consoles."""
     from backtest import run_swing_v2_backtest as mod
 
     ok_ticker = "005930.KS"
@@ -168,3 +171,11 @@ def test_backtest_swing_v2_skips_failed_ticker_and_continues(monkeypatch):
     # per_ticker data), proven by the per-day supply/DART lookups actually firing.
     assert len(supply_calls) == 2
     assert len(dart_calls) == 2
+
+    # Regression: the warning message for the skipped ticker must be pure ASCII
+    # to avoid UnicodeEncodeError on cp949 and other limited consoles.
+    captured = capsys.readouterr()
+    warning_output = captured.out
+    assert warning_output.isascii(), (
+        f"WARNING output contains non-ASCII characters and will fail on cp949: {repr(warning_output)}"
+    )
