@@ -152,16 +152,38 @@ interpretation of this result.
 | Crude next-day-open approximation (same-session sensitivity check) | 200 tickers, 2y | 1,202 | 39.68% | +0.142% (gross) |
 | TOSS-LIVEPRICE-aware + fee-aware (this sub-project) | 959 tickers, 4y | 2,686 | 32.17% | -0.478% (net of ~0.2% round-trip cost) |
 
-Once entries are faithfully reconstructed from TOSS-LIVEPRICE (the price a real order would
-actually have filled at, not the signal-day close) and a realistic ~0.2% round-trip transaction
-cost is applied, the measured edge does not land between the naive and crude-approximation
-figures — it goes negative, at -0.478%/trade, further from both prior numbers than they are from
-each other. This is a reversal, not just an erosion: the naive baseline's +0.886% and the crude
-sensitivity check's +0.142% were both nominally profitable before costs; the TOSS-aware,
-fee-aware measurement is the first of the three to be tested against real fill prices and real
-costs, and it comes back negative. Read plainly, this backtest does not currently show a
-profitable edge once realistic entry pricing and transaction costs are included. Separately, the
-`mdd` (-99.99999953%) and `equity_end` (~4.9e-9) figures from this run reflect the same naive,
+Once entries are reconstructed from TOSS-LIVEPRICE (blocking un-fillable setups outright, and
+rebasing entries onto the live price whenever the gap exceeds 2%; gaps under 2% are not rebased
+in production either, so roughly two-thirds of trades — the "as_is" path — still book a bounded,
+sub-2% overnight gap, while the "rebased" third do not) and a realistic ~0.2% round-trip
+transaction cost is applied, the measured edge does not land between the naive and
+crude-approximation figures — it goes negative, at -0.478%/trade, further from both prior numbers
+than they are from each other. Notably, "as_is" trades average -0.537% pnl versus -0.359% for
+"rebased" trades — the residual overnight-gap effect in the as_is trades is making the reported
+number *less* negative than a fully gap-free measurement would show, so if anything the -0.478%
+headline is still slightly optimistic in production's favor here, not overstated in the
+pessimistic direction. This is a reversal, not just an erosion: the naive baseline's +0.886% and
+the crude sensitivity check's +0.142% were both nominally profitable before costs; the
+TOSS-aware, fee-aware measurement is the first of the three to be tested against real fill prices
+and real costs, and it comes back negative. Read plainly, this backtest does not currently show a
+profitable edge once realistic entry pricing and transaction costs are included.
+
+That said, the reversal between row 2 and row 3 is not attributable to entry-model realism and
+fees alone — the ticker universe also grew from 200 to 959 tickers and the window lengthened
+from 2 years to 4 years (now spanning 2022's bear market) at the same time, and the sample's
+score-tier composition shifted substantially as a result: the 110+ tier was 82.7% of trades in
+the original 1,202-trade run but is 99.1% of trades in the new 2,686-trade run. Decomposing the
+fee effect specifically: this run's **gross** (pre-fee) avg PnL is -0.278%, so the ~0.2%
+round-trip cost accounts for only about 0.2 percentage points of the full 1.364-point swing from
+the original +0.886% to -0.478%; the remaining ~1.16 points are confounded across entry-model
+realism, universe size, and date range simultaneously, and this table cannot cleanly attribute
+them to any one of those changes. A clean apples-to-apples attribution would require re-running
+this plan's code on the original 200-ticker/2-year window specifically — a natural task for a
+follow-up sub-project, not something resolved here. None of this softens the headline conclusion:
+whichever combination of factors drives it, this backtest does not currently show a profitable
+edge, and — per the entry-fill note above and the TOSS-quota note in Limitations — the -0.478%
+figure is, if anything, a slightly optimistic estimate rather than a pessimistic one. Separately,
+the `mdd` (-99.99999953%) and `equity_end` (~4.9e-9) figures from this run reflect the same naive,
 single-account, 100%-capital-per-trade sequential-compounding equity model flagged elsewhere in
 this document (see Executive Summary / Limitations) — they describe what happens if one account
 sequentially bets its entire balance on every trade in a row, not a claim that a realistically
@@ -169,47 +191,93 @@ diversified portfolio running this strategy would go to zero.
 
 ## Limitations
 
-- **Entry-fill model books the overnight gap as free profit — it does not simulate a
-  next-day-open entry.** An earlier version of this document claimed entries are simulated at
-  next-day open; that is incorrect. `backtest/swing_signal_engine.py:314` sets
-  `entry=current_price`, which is the **signal day's close** (`current_price =
-  float(close[idx])` earlier in the same function). `backtest/run_swing_v2_backtest.py:118`
-  then starts the exit walk (`simulate_exit`) at `entry_idx = signal_idx + 1` — the next
-  trading day — but the PnL calculation still divides by the stale signal-day close
-  (`entry=cand.entry`). So every trade's reported PnL silently includes the full overnight gap
-  between the signal day's close and the next day's open, without that gap ever having needed
-  to be tradeable. Re-joining the committed `backtest_out_swing_v2.json` against the cached
-  Yahoo OHLCV data (`cache/yahoo/`, still present in this worktree) to recompute PnL entered at
-  the *actual* next-day open instead, across all 1,202 trades:
+- **[Historical — describes the original 200-ticker/2-year naive and crude-approximation
+  runs only; superseded by the TOSS-aware run below] Entry-fill model booked the overnight gap
+  as free profit — it did not simulate a next-day-open entry.** An earlier version of this
+  document claimed entries are simulated at next-day open; that was incorrect for those original
+  runs. `backtest/swing_signal_engine.py:314` sets `entry=current_price`, which is the **signal
+  day's close** (`current_price = float(close[idx])` earlier in the same function). In the
+  original 1,202-trade run, `run_swing_v2_backtest.py`'s exit walk started at the next trading
+  day but the PnL calculation still divided by the stale signal-day close (`entry=cand.entry`),
+  so every one of those trades' reported PnL silently included the full overnight gap between
+  the signal day's close and the next day's open, without that gap ever having needed to be
+  tradeable. Re-joining the committed `backtest_out_swing_v2.json` against the cached Yahoo
+  OHLCV data (`cache/yahoo/`, still present in this worktree) to recompute PnL entered at the
+  *actual* next-day open instead, across all 1,202 trades:
 
   | Entry model | Avg PnL / trade | Win rate |
   |---|---|---|
-  | Signal-day close (what the code actually computes — today's headline number) | +0.886% | 40.68% |
+  | Signal-day close (what the original code computed) | +0.886% | 40.68% |
   | Next-day open (a fill production could realistically achieve) | **+0.142%** | **39.68%** |
 
-  Average overnight gap = **+0.786%/trade** — this gap is essentially the entire reported edge.
-  Exits still check daily high/low against target/stop under either entry model; this does not
-  capture intraday order fills exactly the way the live 09:00-13:00 scanning cadence does (same
-  caveat as `backtest/README.md`).
-- **No transaction costs modeled.** Neither deliverable includes Korean brokerage fees,
-  증권거래세 (securities transaction tax), or slippage anywhere in the backtest. A realistic KRX
-  round trip costs roughly 0.15-0.2% (sell-side transaction tax plus brokerage commission both
-  ways). Against the +0.886% signal-day-close headline this is a meaningful haircut; against the
-  +0.142% next-day-open sensitivity figure above, it plausibly flips the sign to net-negative.
-- **One extra day of exposure versus what production intends.**
-  `backtest/simulate_exits.py`'s exit loop runs `range(entry_idx, end + 1)` where
-  `end = entry_idx + hold_days` — that is `hold_days + 1` bars, not `hold_days` bars.
+  Average overnight gap = **+0.786%/trade** in that original run — this gap was essentially the
+  entire reported edge. **This plan's TOSS-aware run supersedes both rows above** (see
+  "Entry-model comparison" under Empirical Backtest Results): entry is now computed via
+  `apply_toss_liveprice()` (`backtest/toss_liveprice.py`), called from
+  `run_swing_v2_backtest.py:125`, and the exit walk / PnL calculation use `entry=toss.entry`
+  (lines 131-135) rather than the stale signal-day close. Under that model only the ~66.7% of
+  trades on the "as_is" path (gap under the 2% rebase threshold — which production genuinely
+  does *not* rebase, so this is correct fidelity to production, not a bug) still book something
+  resembling the old overnight-gap effect, and even for those it is bounded to under 2%
+  magnitude; the remaining ~33.3% ("rebased" path) have entries reconstructed at the live price
+  and do not have this issue at all. See the "Entry-model comparison" subsection above for the
+  as_is-vs-rebased PnL split and the direction of the residual bias this leaves (it makes the
+  headline slightly optimistic, not pessimistic). Exits still check daily high/low against
+  target/stop under every entry
+  model discussed here; none of them capture intraday order fills exactly the way the live
+  09:00-13:00 scanning cadence does (same caveat as `backtest/README.md`).
+- **[Historical — the original naive/crude-approximation runs were gross of all costs;
+  transaction costs are now modeled] No transaction costs were modeled in the original runs.**
+  Neither of the two original deliverables (rows 1-2 of the Entry-model comparison table)
+  included Korean brokerage fees, 증권거래세 (securities transaction tax), or slippage anywhere
+  in the backtest. A realistic KRX round trip costs roughly 0.15-0.2% (sell-side transaction tax
+  plus brokerage commission both ways). Against the +0.886% signal-day-close headline this was a
+  meaningful haircut; against the +0.142% next-day-open sensitivity figure it plausibly could
+  have flipped the sign to net-negative. **This plan's TOSS-aware run now models this cost
+  directly:** `apply_round_trip_cost()` (`backtest/transaction_costs.py`), called from
+  `run_swing_v2_backtest.py:136`, applies a ~0.2% round-trip cost to every trade, and the
+  -0.478%/trade headline in the Entry-model comparison table is already net of that cost (gross
+  avg PnL for that run is -0.278% — see the Entry-model comparison subsection for the full
+  decomposition). Do not read the -0.478% figure as a number that still needs a fee haircut
+  applied to it.
+- **[Historical — this was fixed in code by this plan; see below] One extra day of exposure
+  versus what production intended, in the original runs.** The original
+  `backtest/simulate_exits.py` exit loop ran `range(entry_idx, end + 1)` where
+  `end = entry_idx + hold_days` — that was `hold_days + 1` bars, not `hold_days` bars.
   Production's `getHoldDays` (JS) describes "최대 N거래일" (max N trading days) counting the
-  entry day itself, so every simulated trade in this backtest is held one extra trading day
-  beyond what production intends, affecting all timeout exits and giving every trade one extra
-  chance to touch target/stop before timing out. This is a plan-specified detail pinned by the
-  plan's own test fixtures, not an implementer bug — a fidelity note, not a defect to fix in
-  code.
+  entry day itself, so every simulated trade in the original runs was held one extra trading day
+  beyond what production intended, affecting all timeout exits and giving every trade one extra
+  chance to touch target/stop before timing out. The original conclusion here — "a fidelity note,
+  not a defect to fix in code" — has been **reversed by this plan**: `backtest/simulate_exits.py`
+  now computes `end = min(len(df) - 1, entry_idx + hold_days - 1)`, which matches production's
+  "최대 N거래일" semantics exactly (hold_days counts the entry day itself as day 1). This was a
+  real defect and it was fixed in code; the TOSS-aware run in the Entry-model comparison table
+  above reflects the corrected hold-days logic.
 - Toss real-time order-book confirmation not modeled on the trade-count side (see Finding 5)
   — live *trade count* is plausibly lower than backtested trade count to the extent Toss
   successfully filters bad fills. Separately, and more materially, `TOSS-LIVEPRICE`'s
   entry-rebasing/blocking behavior is also not modeled — see Finding 5 for why this makes the
   backtest's PnL an upper bound, not a lower bound, on what production would actually realize.
+- **TOSS-blocked candidates consume this backtest's weekly send quota; production's do not.**
+  In `backtest/run_swing_v2_backtest.py`, `apply_daily_selection()` (line 117) increments the
+  weekly count/dedup-set for every selected candidate *before* the TOSS block check runs later
+  in the same loop (line 126). In production (`src/swing-scanner.src.js:1825`), that
+  bookkeeping only happens for candidates that actually get sent — `if (res) { ...
+  store.weeklyRecommendations[...].push(...) }` gates both `MAX_WEEKLY_SENDS` and the dedup set
+  on a successful send, so a TOSS-blocked candidate in production never consumes its weekly slot
+  or dedup eligibility, and a different (next-ranked) candidate fills that slot instead. In this
+  backtest, a TOSS-blocked candidate still burns the slot, so no replacement candidate is ever
+  considered for it. Measured impact: 148 of 205 weeks hit the 15-selection weekly cap, and 109
+  of the 146 TOSS blocks landed in those cap-bound weeks — roughly 109 weekly slots (≈4% of the
+  2,686-trade count) that production would have refilled with a different candidate were instead
+  left empty here. Directionally, the omitted replacement candidates would have been lower-ranked
+  (worse-scored) than the blocked ones, and on an already-negative-edge strategy, adding more
+  lower-quality trades would plausibly make the average PnL more negative, not less — so this gap
+  likely biases the current -0.478% figure slightly optimistic too, the same direction as the
+  residual as_is entry-gap effect noted above. Not code-fixed here — fixing it would require
+  re-running the 1-3 hour backtest, which is out of scope for this documentation-only pass;
+  recommended for the next sub-project's re-run (move the TOSS block check before quota
+  bookkeeping, or refund the slot when a candidate is blocked).
 - Gap-detection nuance in `getMarketRegime` (today-vs-yesterday gap source switching) is
   simplified to pure SMA-based leveling in the what-if reconstruction (Task 4) — the
   what-if numbers are directionally, not exactly, faithful to the original blocking rule. Two
