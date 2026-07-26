@@ -278,7 +278,7 @@
   <div class="top-inner">
     <span class="eyebrow">Backtest Report</span>
     <span class="top-title">swing-scanner.src.js — Profitability Review</span>
-    <span class="verdict-chip">● Marginal net-positive edge, concentrated in top score tier</span>
+    <span class="verdict-chip">● Marginal edge, concentrated in top score tier &amp; highly sensitive to entry-fill timing</span>
   </div>
 </header>
 
@@ -290,7 +290,10 @@
       Faithful Python port of the production swing-recommendation engine, backtested across
       200 KRX tickers from 2024-01-01 to 2026-01-01. 1,202 trades generated, sorted by pattern,
       score tier, and a reconstruction of a regime-blocking rule that has silently rotted into
-      dead code.
+      dead code. <strong>The headline edge below is highly sensitive to the backtest's entry-fill
+      assumption</strong> — entries are booked at the signal day's close rather than a
+      realistically fillable next-day price, and most of the reported edge is overnight gap, not
+      selection skill (see the Entry-Fill Sensitivity panel below).
     </p>
     <div class="hero-meta">
       <span><b>Universe</b> 200 KRX tickers (1 delisted, skipped)</span>
@@ -311,6 +314,7 @@
         <div class="stat-label">Avg PnL / trade</div>
         <div class="stat-value good mono">+0.89%</div>
         <div class="stat-sub">median −4.00%</div>
+        <div class="stat-flag">⚠ +0.14% / 39.68% win if entered at next-day open</div>
       </div>
       <div class="stat">
         <div class="stat-label">Max drawdown</div>
@@ -321,6 +325,39 @@
         <div class="stat-label">Equity end (1.0 start)</div>
         <div class="stat-value mono">1855.16×</div>
         <div class="stat-flag">⚠ single compounding account</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Entry-Fill Sensitivity</h2>
+      <span class="section-note">backtest/swing_signal_engine.py:314, backtest/run_swing_v2_backtest.py:118 &mdash; re-joined against cache/yahoo/</span>
+    </div>
+    <div class="card">
+      <div class="regime-grid">
+        <div class="regime-col">
+          <div class="k">Signal-day close (what the code computes)</div>
+          <div class="regime-metric"><span>Avg PnL</span><span class="v mono">+0.886%</span></div>
+          <div class="regime-metric"><span>Win rate</span><span class="v mono">40.68%</span></div>
+        </div>
+        <div class="regime-arrow">→</div>
+        <div class="regime-col">
+          <div class="k">Next-day open (realistic fill)</div>
+          <div class="regime-metric"><span>Avg PnL</span><span class="v mono">+0.142%</span></div>
+          <div class="regime-metric"><span>Win rate</span><span class="v mono">39.68%</span></div>
+        </div>
+        <div class="delta-note">
+          Entries in this backtest are booked at the <strong>signal day's close</strong>
+          (<code>entry=current_price</code>), not next-day open &mdash; a prior version of this
+          report incorrectly claimed the latter. The exit walk starts the next trading day, but
+          PnL is still computed against the stale signal-day close, so every trade silently books
+          the full overnight gap (average <strong>+0.786%/trade</strong>) as free profit &mdash;
+          essentially the entire headline edge. Re-pricing entry at the actual next-day open
+          across all 1,202 trades collapses avg PnL from +0.886% to +0.142% and win rate from
+          40.68% to 39.68%. This is also why Finding 5 (Toss <code>TOSS-LIVEPRICE</code>) below is
+          reframed as an <strong>upper bound</strong>, not a lower bound, on realized PnL.
+        </div>
       </div>
     </div>
   </section>
@@ -536,26 +573,50 @@
       </div>
 
       <div class="finding">
-        <div class="finding-top"><div class="finding-num">5</div><div class="finding-title">Toss real-time order-book confirmation is unmeasured</div></div>
+        <div class="finding-top"><div class="finding-num">5</div><div class="finding-title">Toss confirmation is unmeasured &mdash; and its omission inflates PnL, not just trade count</div></div>
         <div class="finding-body">
-          <code>tossConfirm()</code> blocks unfavorable-orderbook sends live; no historical
-          equivalent exists. It can only reduce trade count, so every number above is an upper
-          bound on trade frequency &mdash; live win rate is plausibly higher.
+          <code>tossConfirm()</code> blocks unfavorable-orderbook sends live with no historical
+          equivalent &mdash; on its own this only reduces trade count, so the backtest stays an
+          upper bound on trade frequency. But <code>TOSS-LIVEPRICE</code> (added 2026-07-19) also
+          <strong>rebases</strong> entry/target/stop onto the live price and <strong>blocks</strong>
+          sends that already reached target/stop by the 09:10 send time &mdash; exactly the
+          overnight-gap profit this backtest books (see Entry-Fill Sensitivity above). So this
+          backtest is an <strong>upper bound</strong> on realized PnL relative to production, not a
+          lower bound as previously stated.
         </div>
-        <span class="finding-tag tag-neutral">Out of scope for backtest</span>
+        <span class="finding-tag tag-warn">PnL direction corrected &mdash; upper bound, not lower</span>
       </div>
 
     </div>
   </section>
 
   <footer>
-    <strong>Read this backtest with two caveats in mind:</strong>
+    <strong>Read this backtest with these caveats in mind:</strong>
     <ul>
+      <li><strong>No transaction costs are modeled anywhere</strong> &mdash; no brokerage fees,
+        증권거래세 (securities transaction tax), or slippage. A realistic KRX round trip runs
+        roughly 0.15&ndash;0.2% (sell-side tax plus commission both ways). Against the +0.886%
+        signal-day-close headline this is a meaningful haircut; against the +0.142%
+        next-day-open sensitivity figure above, it plausibly flips the sign to net-negative.</li>
+      <li><strong>Every simulated trade is held one day longer than production intends</strong>
+        &mdash; <code>backtest/simulate_exits.py</code>'s exit loop runs <code>hold_days + 1</code>
+        bars, not <code>hold_days</code>, because production's "최대 N거래일" counts the entry day
+        itself. This gives every trade one extra chance to touch target/stop before timing out.
+        Not an implementer bug &mdash; a plan-pinned fidelity detail, disclosed here.</li>
       <li><strong>KRX supply data was unavailable all run</strong> &mdash; the foreign/institutional
         net-buy endpoint returned HTTP 400 for every call in this environment (a known session/auth
-        limitation, handled gracefully, not a crash). Every trade above was generated from
-        price/volume/DART signals alone; supply-based bonuses and the negative-supply hard-block
-        never fired.</li>
+        limitation, handled gracefully, not a crash). Every trade above was generated primarily from
+        price/volume signals; supply-based bonuses and the negative-supply hard-block never fired,
+        and DART disclosures contributed to only a small minority of trades (only ~18 of 1,202 had
+        any same-day disclosure, only ~2 matched a positive keyword) &mdash; expected given
+        production's <code>page_count=100</code> pagination limit, not a bug.</li>
+      <li><strong>Regime what-if reconstruction is directionally, not exactly, faithful</strong>
+        &mdash; besides the gap-detection simplification noted in Finding 1's panel above, the
+        macro overlay compares a Korean trading day to the <em>same-calendar-date</em> NASDAQ/VIX
+        close (the US session actually closes ~06:00 KST the <em>next</em> day), and
+        <code>SP500_DOWN_THRESH</code> &mdash; one of production's three macro triggers &mdash; is
+        commented out/unused in the reconstruction. Affects only the secondary what-if comparison,
+        whose "marginal effect" conclusion is robust to this.</li>
       <li><strong>Drawdown/equity figures are illustrative, not a portfolio simulation</strong>
         &mdash; they compound all 1,202 trades sequentially in one account rather than modeling the
         up-to-3-concurrent-positions/day the algorithm actually allows. Treat win rate / avg PnL /

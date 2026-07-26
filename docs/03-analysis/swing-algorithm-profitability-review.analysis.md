@@ -11,14 +11,23 @@
 | Avg PnL / trade | 0.89% |
 | Median PnL / trade | -4.00% |
 | Max drawdown | -92.80% (see Limitations — single naive compounding account, not a realistic portfolio figure) |
+| Avg PnL / trade — next-day-open entry sensitivity | **+0.14%** (see Limitations — entry-fill model) |
+| Win rate — next-day-open entry sensitivity | **39.68%** |
 
-The algorithm shows a real positive per-trade edge (avg PnL +0.89%, driven by a right-skewed
-payoff: a 40.68% win rate combined with a fixed -4% median loss is only profitable overall
-because winning trades are large enough to outweigh the much more frequent -4% stop-outs). The
-edge is not uniform: the 60-89 score tier is a net loser and the D박스 pattern is the weakest by
-win rate (see below). Two headline caveats materially affect how these numbers should be read —
-KRX supply-side signals never fired anywhere in this run, and the drawdown/equity figures are an
-illustrative single-account model, not a realistic portfolio simulation (see Limitations).
+The algorithm shows a positive per-trade edge under the entry-fill mechanics the backtest
+actually computes (avg PnL +0.89%, driven by a right-skewed payoff: a 40.68% win rate combined
+with a fixed -4% median loss is only profitable overall because winning trades are large enough
+to outweigh the much more frequent -4% stop-outs). **That headline number is highly sensitive to
+an unrealistic entry-price assumption, though:** entries are booked at the signal day's close,
+and roughly 0.79pp of the average trade's return is nothing more than the overnight gap to the
+next day's open — a fill this backtest never actually has to earn (see Limitations). Recomputing
+PnL at the next-day open, the fill production could realistically achieve, collapses the edge to
+**+0.14% avg PnL / 39.68% win rate** — most of the reported edge is overnight gap, not selection
+skill. The edge is not uniform under either entry model: the 60-89 score tier is a net loser and
+the D박스 pattern is the weakest by win rate (see below). Several headline caveats materially
+affect how these numbers should be read — the entry-fill sensitivity above, KRX supply-side
+signals never firing anywhere in this run, and the drawdown/equity figures being an illustrative
+single-account model, not a realistic portfolio simulation (see Limitations).
 
 ## Code Review Findings
 
@@ -63,13 +72,27 @@ class of failure could silently zero out the *live* scanner's candidate generati
 any error surfacing, given the pattern of `catch(e) { return null }` swallowing seen
 throughout this codebase.
 
-### 5. Real-time order-book confirmation (Toss) cannot be backtested
+### 5. Real-time Toss confirmation cannot be backtested — and its omission inflates PnL, not just trade count
 `tossConfirm()` (src/swing-scanner.src.js:1613+) blocks sends when the ask/bid ratio or
 buy-execution ratio look unfavorable, using live order-book data with no historical
-equivalent. Its effect is unmeasured — it can only reduce trade count (never invents
-trades), so the backtest below is an upper bound on trade frequency and a lower bound on
-"how bad the worst-executed signals would have been" (Toss's job is specifically to catch
-those).
+equivalent. On its own this piece only ever reduces trade count (never invents trades), so
+on trade *frequency* the backtest remains an upper bound, as previously noted.
+
+However, `TOSS-LIVEPRICE` (src/swing-scanner.src.js:1652-1710, added 2026-07-19) does more
+than gate frequency: entry is computed from 전일 종가 (prior close), but the actual send
+happens at 09:10 the next morning, so production (a) **blocks** the send if the live price
+already reached target/stop by send time (추격매수 위험 — chasing risk), and (b) **rebases**
+`entry`/`target`/`stop` onto the live price when the gap exceeds a threshold. This backtest
+models neither behavior — it simply books the entire overnight gap between the signal-day
+close and the next-day open as trade PnL (see the entry-fill correction in Limitations: that
+gap alone is +0.786%/trade, essentially the whole reported edge). `TOSS-LIVEPRICE` exists
+specifically to remove that gap from what actually gets filled.
+
+So the previous framing here had the PnL direction backwards: this backtest is an **upper
+bound** on realized per-trade PnL relative to what production's live-price logic would
+actually allow, **not a lower bound**. The trade-*count* claim above still holds — Toss can
+only reduce how many trades fire, never invent one — but do not read the reported avg PnL /
+win rate as conservative relative to live execution; they are optimistic.
 
 ## Empirical Backtest Results
 
@@ -123,14 +146,59 @@ interpretation of this result.
 
 ## Limitations
 
-- Daily-bar backtest: entries are simulated at next-day open, exits check daily high/low
-  against target/stop — this does not capture intraday order fills exactly the way the
-  live 09:00-13:00 scanning cadence does (same caveat as `backtest/README.md`).
-- Toss real-time confirmation not modeled (see Finding 5) — live win rate is plausibly
-  *higher* than backtested win rate to the extent Toss successfully filters bad fills.
+- **Entry-fill model books the overnight gap as free profit — it does not simulate a
+  next-day-open entry.** An earlier version of this document claimed entries are simulated at
+  next-day open; that is incorrect. `backtest/swing_signal_engine.py:314` sets
+  `entry=current_price`, which is the **signal day's close** (`current_price =
+  float(close[idx])` earlier in the same function). `backtest/run_swing_v2_backtest.py:118`
+  then starts the exit walk (`simulate_exit`) at `entry_idx = signal_idx + 1` — the next
+  trading day — but the PnL calculation still divides by the stale signal-day close
+  (`entry=cand.entry`). So every trade's reported PnL silently includes the full overnight gap
+  between the signal day's close and the next day's open, without that gap ever having needed
+  to be tradeable. Re-joining the committed `backtest_out_swing_v2.json` against the cached
+  Yahoo OHLCV data (`cache/yahoo/`, still present in this worktree) to recompute PnL entered at
+  the *actual* next-day open instead, across all 1,202 trades:
+
+  | Entry model | Avg PnL / trade | Win rate |
+  |---|---|---|
+  | Signal-day close (what the code actually computes — today's headline number) | +0.886% | 40.68% |
+  | Next-day open (a fill production could realistically achieve) | **+0.142%** | **39.68%** |
+
+  Average overnight gap = **+0.786%/trade** — this gap is essentially the entire reported edge.
+  Exits still check daily high/low against target/stop under either entry model; this does not
+  capture intraday order fills exactly the way the live 09:00-13:00 scanning cadence does (same
+  caveat as `backtest/README.md`).
+- **No transaction costs modeled.** Neither deliverable includes Korean brokerage fees,
+  증권거래세 (securities transaction tax), or slippage anywhere in the backtest. A realistic KRX
+  round trip costs roughly 0.15-0.2% (sell-side transaction tax plus brokerage commission both
+  ways). Against the +0.886% signal-day-close headline this is a meaningful haircut; against the
+  +0.142% next-day-open sensitivity figure above, it plausibly flips the sign to net-negative.
+- **One extra day of exposure versus what production intends.**
+  `backtest/simulate_exits.py`'s exit loop runs `range(entry_idx, end + 1)` where
+  `end = entry_idx + hold_days` — that is `hold_days + 1` bars, not `hold_days` bars.
+  Production's `getHoldDays` (JS) describes "최대 N거래일" (max N trading days) counting the
+  entry day itself, so every simulated trade in this backtest is held one extra trading day
+  beyond what production intends, affecting all timeout exits and giving every trade one extra
+  chance to touch target/stop before timing out. This is a plan-specified detail pinned by the
+  plan's own test fixtures, not an implementer bug — a fidelity note, not a defect to fix in
+  code.
+- Toss real-time order-book confirmation not modeled on the trade-count side (see Finding 5)
+  — live *trade count* is plausibly lower than backtested trade count to the extent Toss
+  successfully filters bad fills. Separately, and more materially, `TOSS-LIVEPRICE`'s
+  entry-rebasing/blocking behavior is also not modeled — see Finding 5 for why this makes the
+  backtest's PnL an upper bound, not a lower bound, on what production would actually realize.
 - Gap-detection nuance in `getMarketRegime` (today-vs-yesterday gap source switching) is
   simplified to pure SMA-based leveling in the what-if reconstruction (Task 4) — the
-  what-if numbers are directionally, not exactly, faithful to the original blocking rule.
+  what-if numbers are directionally, not exactly, faithful to the original blocking rule. Two
+  further not-fully-faithful details in the same reconstruction, disclosed here for the same
+  reason: (a) the macro overlay compares a Korean trading day's return to the
+  **same-calendar-date** NASDAQ/VIX close, when the US session for that date actually closes
+  ~06:00 KST the *next* day — production intends the prior completed US session; this only
+  affects the secondary what-if comparison (whose "marginal effect" conclusion in Finding 1 is
+  robust to this), not the primary results. (b) `SP500_DOWN_THRESH` — one of production's three
+  macro triggers — is commented out/unused in the regime reconstruction. Neither is a new bug;
+  both are the same category of "not fully faithful, and here's specifically how" as the
+  gap-detection note above.
 - **KRX supply-data unavailable for this entire run.** The KRX foreign/institutional
   net-buy endpoint (`data.krx.co.kr`) returned HTTP 400 for every call during this backtest
   (build-time evidence in `backtest/tickers_operating.meta.json`'s `errors` field: `"KRX
@@ -139,9 +207,13 @@ interpretation of this result.
   This was handled gracefully by the code — it returns `{}` per day with no crash, which is
   **not a bug** — but it means the supply-based score bonuses ("외국인+기관동반",
   "외국인순매수", "기관순매수") and the negative-supply hard-block never fired anywhere in
-  this backtest. Every one of the 1,202 trades above was generated purely from
-  price/volume/DART-disclosure signals, with zero supply-side signal contribution. This is a
-  real fidelity gap in *this specific run* relative to what production actually does
+  this backtest. Every one of the 1,202 trades above was generated primarily from price/volume
+  signals, with DART disclosures and (unavailable, see above) supply signals contributing to
+  only a small minority of trades — of the 1,202 trades, only about 18 had any same-day DART
+  disclosure for their code, and only about 2 matched a positive keyword, so DART's practical
+  contribution to this specific backtest is negligible. That is not a bug — it matches
+  production's `page_count=100` pagination limit — it was simply under-disclosed until now. This
+  is a real fidelity gap in *this specific run* relative to what production actually does
   (production presumably has working KRX access) — it is not a fundamental limitation of the
   Python port itself, and should not be read as "the port is missing this feature."
 - **The equity curve model is a single naive sequentially-compounding account, not
