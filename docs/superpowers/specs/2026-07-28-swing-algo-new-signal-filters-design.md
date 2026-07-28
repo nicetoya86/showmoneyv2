@@ -48,6 +48,8 @@ negative result is reported plainly, not papered over, and becomes the trigger t
      returns, gated by a minimum sector sample size.
 - A one-time KRX sector-classification snapshot (reusing production's existing `MDCSTAT01501`
   endpoint pattern, currently dead code at `src/swing-scanner.src.js:988-1019`).
+  **[Superseded — see Design Revision note under Architecture]** the shipped snapshot sources
+  from Naver Finance instead; this bullet describes the original pre-implementation plan.
 - Extending `backtest/target_stop_grid_search.py`'s `run_one_config`/`run_grid_search` with an
   optional tag-filter parameter, defaulting to "no filter" (byte-identical to sub-project 2's
   existing behavior — regression-tested).
@@ -102,6 +104,8 @@ Four corrections made before finalizing, per a professional-trading-perspective 
 ```
 [NEW] backtest/krx_sector_snapshot.py
       → fetch_sector_snapshot(trd_dd) -> Dict[code, sector_code]
+        [Superseded — see Design Revision note above: shipped code sources from Naver Finance,
+        not KRX, and returns a Naver group-number string, not a KRX sector code]
       → one-time call (most recent available trading day), mirrors krx_supply_history.py's
         style exactly (headers, disk cache, fail-to-empty-dict)
 
@@ -133,9 +137,40 @@ No changes to `evaluate_candidate()`, `apply_toss_liveprice`, `simulate_exit`,
 `apply_round_trip_cost`, `analyze_portfolio_return`, or any of sub-project 1/2's already-reviewed
 modules — all consumed as-is.
 
+## Design Revision — sector data source
+
+**[Post-implementation, added at final review]** Everywhere in this document that describes
+`backtest/krx_sector_snapshot.py` sourcing from `data.krx.co.kr`'s `MDCSTAT01501` endpoint
+(the Architecture diagram above, and the `krx_sector_snapshot.py` component description below)
+is **stale** and describes the original plan, not the shipped code. During Task 7's real
+execution, that KRX endpoint returned HTTP 400 ("LOGOUT") in this environment — an
+anti-bot/session-registration block specific to this environment (plain `requests.get`/`.post`
+cannot pass it), not a code defect. `backtest/krx_sector_snapshot.py` was revised to source the
+same code→sector mapping from Naver Finance's industry-group pages
+(`finance.naver.com/sise/sise_group*`) instead, keeping the same public function signature
+(`fetch_sector_snapshot(trd_dd: str) -> Dict[str, str]`) and the same disk-cache contract (cached
+under the `trd_dd` key), but returning a **Naver industry-group number as a string** (e.g.
+`"275"`) rather than a 6-character KRX sector code. Naver's grouping has no historical `trdDd`
+parameter, so this is a single current snapshot regardless of the `trd_dd` passed in — which
+realizes, rather than changes, the "static sector classification, one snapshot" limitation
+already accepted elsewhere in this document. This substitution was already reviewed and merged as
+part of Tasks 4/7; it does not affect any downstream consumer, since `candidate_signals.py` only
+ever compares sector-code strings for equality/grouping and never interprets their value or
+format. **`backtest/krx_sector_snapshot.py`'s own module docstring is the authoritative
+description of current behavior** — read it directly rather than relying on this document for
+sourcing details. The historical KRX-based passages below are left in place, each flagged
+`[Superseded — see Design Revision note]`, rather than deleted, so this document still records
+what was originally planned and why it changed.
+
 ## Components
 
 ### `backtest/krx_sector_snapshot.py` (new)
+
+**[Superseded — see Design Revision note above]** The **Produces**/**Consumes** description below
+describes the original pre-implementation plan (KRX-sourced, 6-char sector code). The shipped
+module instead sources from Naver Finance and returns a Naver group-number string — see the
+Design Revision note above and `backtest/krx_sector_snapshot.py`'s own docstring for the
+authoritative current behavior. Left below, unedited, for the historical record.
 
 **Produces:** `fetch_sector_snapshot(trd_dd: str) -> Dict[str, str]` mapping stock code → 6-char
 sector code, parsed from `IDX_IND_NM`/`SECT_TP_NM` fields — same fields, same parsing rule

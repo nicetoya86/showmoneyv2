@@ -108,7 +108,12 @@ though it never crosses into profit. Read off the test-`cagr_15slot` column abov
 - Best single tag (`vol_contraction`): -16.21%/yr
 - Best pair (`trend_aligned+vol_contraction`): -13.61%/yr
 - All three tags together: **-7.79%/yr** — the best result of all 8 subsets, on a real,
-  non-trivial test sample (`n_trades=406`), not a low-n artifact.
+  non-trivial test sample (`n_trades=406`), not a low-n artifact. Caveat this result, though: as
+  the "Best-CAGR configuration regardless of frequency" subsection below shows, only 12 of the
+  triple-tag subset's 432 train grid cells clear the `trades_per_week >= 5` floor at all, and the
+  maximum frequency achievable anywhere in that subset's grid is only ≈5.33/week — so this
+  "best of all 8" selection was drawn from a very narrow, near-binding feasible region, making it
+  more fragile than the headline number alone implies.
 
 This improvement is **driven almost entirely by `vol_contraction`**, not by all three tags equally.
 Compare the subsets that omit `vol_contraction` — `trend_aligned` alone (-25.52%/yr test),
@@ -116,13 +121,61 @@ Compare the subsets that omit `vol_contraction` — `trend_aligned` alone (-25.5
 the -29.59%/yr no-filter baseline), and `trend_aligned+sector_strong` (-28.25%/yr, also barely
 different from no filter) — against every subset that includes `vol_contraction`, all of which land
 in the -7.79% to -16.21%/yr range. `sector_strong` in particular adds essentially no improvement on
-its own or paired with `trend_aligned`, consistent with the sector-strength selectivity caveat in
-§5 below. The
+its own or paired with `trend_aligned`, consistent with §5's finding that `sector_strong` is
+largely redundant with candidacy itself (candidates already skew toward strong sectors, so the tag
+adds little new information). The
 "monotonic improvement with more tags" framing is only approximately true — it holds cleanly along
 the paths that include `vol_contraction`, but adding `sector_strong` to a `vol_contraction`-based
 subset (`vol_contraction+sector_strong`, -14.03%/yr) is very slightly *worse* than
 `trend_aligned+vol_contraction` (-13.61%/yr) alone, before the full triple combination pulls ahead
 to -7.79%/yr.
+
+### Best-CAGR configuration regardless of hit-rate or frequency (train, all 8 subsets)
+
+Every number in the table above (and the fallback selection in §4) is constrained by the design
+doc's `trades_per_week >= 5` floor. For reference — the same "regardless of frequency" reporting
+sub-project 2 did (`swing-algo-target-stop-retuning.analysis.md` §2) — here is, for each subset,
+the single train grid cell with the highest `cagr_15slot` out of all 432 cells with no frequency
+floor applied at all, plus how many of the 432 cells clear `trades_per_week >= 5` and the maximum
+`trades_per_week` achievable anywhere in that subset's grid. Computed directly from
+`backtest_signal_filter_results.json`'s `train_results` arrays (432 cells per subset, all 8
+subsets), not estimated:
+
+| Subset | Best `cagr_15slot`, any cell (train, no freq floor) | Cells clearing `tpw >= 5` (of 432) | Max `tpw` achievable |
+|---|---:|---:|---:|
+| none | -9.62%/yr | 432/432 | 12.54 |
+| trend_aligned | -7.83%/yr | 432/432 | 11.99 |
+| vol_contraction | -1.92%/yr | 430/432 | 9.68 |
+| sector_strong | -9.48%/yr | 432/432 | 11.89 |
+| trend_aligned+vol_contraction | -1.48%/yr | 271/432 | 7.53 |
+| trend_aligned+sector_strong | -7.76%/yr | 432/432 | 10.76 |
+| vol_contraction+sector_strong | -2.87%/yr | 185/432 | 6.72 |
+| trend_aligned+vol_contraction+sector_strong | -2.84%/yr | 12/432 | 5.33 |
+
+Two things this reveals:
+
+- **(a) Relaxing the frequency floor gets `vol_contraction`-containing subsets meaningfully closer
+  to breakeven — but not the others.** `trend_aligned+vol_contraction`'s best-any-cell result
+  (-1.48%/yr) is roughly **9x closer to zero** than that same subset's frequency-constrained train
+  result (-13.71%/yr, §2); `vol_contraction` alone is similar (-1.92%/yr vs. -16.30%/yr
+  frequency-constrained, ≈8.5x closer). Subsets that omit `vol_contraction` do not get nearly the
+  same relief: `sector_strong` alone only improves from -24.20%/yr to -9.48%/yr (≈2.6x),
+  `trend_aligned` alone from -26.60%/yr to -7.83%/yr (≈3.4x), and `trend_aligned+sector_strong`
+  from -21.96%/yr to -7.76%/yr (≈2.8x) — closer, but nowhere near breakeven even with the frequency
+  constraint fully removed. This bears directly on whether Phase A's `vol_contraction`-based
+  filtering is "structurally dead" or merely "frequency-constrained": for the
+  `vol_contraction`-containing subsets specifically, a large share of the reported loss is
+  attributable to the frequency floor forcing acceptance of lower-quality cells, not to the
+  underlying candidate pool being hopeless — the same subsets without `vol_contraction` show no
+  such effect and remain strongly negative regardless.
+- **(b) The triple-tag subset's "best of all 8" result (§3) comes from a narrow, near-binding
+  feasible region.** Only 12 of its 432 cells clear `trades_per_week >= 5` at all, and the maximum
+  `trades_per_week` achievable anywhere in its grid is ≈5.33 — barely above the 5/week floor
+  itself. The frequency-constrained config §2/§3 report as the best result of all 8 subsets
+  (-7.79%/yr test) was therefore selected from a feasible region so small and so close to the
+  floor's own boundary that a slightly different train/test split or grid resolution could easily
+  shrink it to zero or below, unlike e.g. `none` or `sector_strong` where 432/432 cells clear the
+  floor and the selection is far from any boundary.
 
 **Verdict: target not met. No subset is recommended for deployment.** Per the design doc's roadmap
 and the same honesty standard applied in sub-project 2, this negative result is the condition for
@@ -153,18 +206,37 @@ configurations without recommending either for deployment.
 
 ## 5. Limitations
 
-- **Sector-strength selectivity is weaker than "top 30% of sectors" implies.** `sector_strong`
-  fired `True` for 50.3% of all candidates (10,859/21,587) — well above what a naive reading of
-  `top_frac=0.3` suggests. Root cause: `build_sector_returns_by_date` only has the ~915 tickers that
-  actually produced candidates to group into sectors on any given date (not the full market), so on
-  many dates few sectors clear the `min_sector_size=5` gate, and
-  `compute_sector_strength`'s `cutoff_idx = max(0, int(len(ranked) * top_frac) - 1)` collapses
-  toward including nearly everything when the qualifying-sector count is small. In practice,
-  `sector_strong` behaves closer to "not in the worst sectors among a sparse comparison set" than
-  "top 30% of real market sectors." This is consistent with §3's finding that `sector_strong`
-  contributes little to no improvement on its own or in combination — it is a genuine limitation of
-  this phase's sector-strength signal, not a bug, and is out of scope to fix here (the code
-  producing this behavior was already reviewed and merged in Tasks 4/7 of this sub-project).
+- **`sector_strong` fires for 50.3% of candidates not because the gate is loose, but because
+  candidates are concentrated in already-strong sectors.** An earlier version of this document
+  attributed the 50.3% fire rate to `cutoff_idx` collapsing toward "nearly everything" on dates
+  where few sectors clear the `min_sector_size=5` gate. That explanation is wrong, and does not
+  survive re-deriving `build_sector_returns_by_date` against the real committed data
+  (`backtest_candidate_tags.json` + `backtest_candidates_with_paths.json` + `backtest_sector_map.json`,
+  re-run through the actual `build_sector_returns_by_date`/`compute_sector_strength` logic in
+  `backtest/candidate_signals.py`): across all 1,199 dates in the dataset, the qualifying-sector
+  count (sectors with ≥5 of the 955 cached tickers contributing a valid trailing-20-day return that
+  date) is **42-45 on every single date** (mean 43.9) — never small, not once. At every one of those
+  observed sizes, `cutoff_idx` selects **27.9%-29.5%** of sectors (e.g. `n=42` → top 12/42 = 28.6%;
+  `n=45` → top 13/45 = 28.9%) — essentially exactly the intended top-30%, slightly *stricter* than
+  `top_frac=0.3`, never looser. Weighting each qualifying date by how many of the 21,587 candidates
+  actually fall on it gives an expected `sector_strong` fire rate, if candidates were spread
+  uniformly across qualifying sectors, of **28.57%** — almost exactly what the cutoff math predicts.
+  The observed rate is **50.30%** (10,859/21,587), roughly **1.76x** the chance rate, not because the
+  selectivity is loose but because **candidates are not spread uniformly across sectors**:
+  `evaluate_candidate()` (the existing, unmodified production scoring/pattern engine) is itself a
+  momentum/breakout detector, so the candidate pool it produces clusters disproportionately in
+  sectors that are already outperforming. Being a candidate already implies membership in a
+  currently-strong sector roughly 1.8x more often than chance — `sector_strong` is largely
+  redundant with candidacy itself, not miscalibrated. This strengthens, rather than merely
+  restates, §3's finding that `sector_strong` contributes little to no improvement on its own or in
+  combination: it isn't that the tag is too permissive to be selective, it's that the information it
+  encodes is already substantially baked into what `evaluate_candidate()` flags as a candidate in
+  the first place. It also bears directly on Phase B scoping (§6) — if Phase B ever considers sector
+  membership as a candidate-admission signal, this result says sector membership is not new
+  information over the existing candidate pool and would need to be paired with something that
+  changes *which* stocks are admitted, not just re-derived from stocks the current engine already
+  flags. Not a bug, and out of scope to fix here (the code producing this behavior was already
+  reviewed and merged in Tasks 4/7 of this sub-project).
 - **Sector data source deviates from the original design.** The design doc specified a KRX
   (`data.krx.co.kr`) sector-classification snapshot via the `MDCSTAT01501` endpoint. That endpoint
   was found to return HTTP 400 ("LOGOUT") in this environment — a session-flow block specific to
