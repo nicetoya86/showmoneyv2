@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-07-28T13:14:49.049Z",
+  "lastUpdated": "2026-07-28T13:22:51.002Z",
   "activeFeatures": [
     "showmoneyv2",
     "scripts",
@@ -92,9 +92,9 @@
       },
       "timestamps": {
         "started": "2026-04-19T06:37:56.243Z",
-        "lastUpdated": "2026-07-28T13:14:17.927Z"
+        "lastUpdated": "2026-07-28T13:22:51.002Z"
       },
-      "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\analyze_portfolio_return.py"
+      "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\generate_signal_candidates.py"
     },
     "swing-nodup-fund-exclude": {
       "phase": "check",
@@ -216,9 +216,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-07-25T12:12:11.648Z",
-        "lastUpdated": "2026-07-28T13:14:49.049Z"
+        "lastUpdated": "2026-07-28T13:22:25.718Z"
       },
-      "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\tests\\test_analyze_portfolio_return.py"
+      "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\tests\\test_generate_signal_candidates.py"
     },
     "swing-algo-profitability-review": {
       "phase": "do",
@@ -242,7 +242,7 @@
   "session": {
     "startedAt": "2026-03-08T14:53:57.237Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-07-28T13:14:49.049Z"
+    "lastActivity": "2026-07-28T13:22:51.002Z"
   },
   "history": [
     {
@@ -2654,6 +2654,18 @@
     {
       "timestamp": "2026-07-28T13:14:49.049Z",
       "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-28T13:22:25.718Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-28T13:22:51.002Z",
+      "feature": "backtest",
       "phase": "do",
       "action": "updated"
     }
