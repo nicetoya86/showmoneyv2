@@ -78,3 +78,61 @@ def compute_vol_contraction(
 
     threshold = float(np.quantile(window, percentile))
     return bool(current <= threshold)
+
+
+def build_sector_returns_by_date(
+    sector_map: Dict[str, str],
+    per_ticker_ohlcv: Dict[str, pd.DataFrame],
+    *,
+    lookback: int = 20,
+    min_sector_size: int = 5,
+) -> Dict[str, Dict[str, float]]:
+    """date (ISO string) -> {sector_code: equal-weighted trailing-lookback-day return}, including
+    only sectors with >= min_sector_size tickers contributing a valid return that date."""
+    by_date_sector: Dict[str, Dict[str, List[float]]] = {}
+    for ticker, df in per_ticker_ohlcv.items():
+        code = ticker[:-3] if ticker.endswith(".KS") or ticker.endswith(".KQ") else ticker
+        sector = sector_map.get(code)
+        if not sector:
+            continue
+        close = df["close"].astype(float)
+        ret = close / close.shift(lookback) - 1.0
+        for date_val, r in zip(df["timestamp_utc"], ret):
+            if pd.isna(r):
+                continue
+            date_key = pd.Timestamp(date_val).date().isoformat()
+            by_date_sector.setdefault(date_key, {}).setdefault(sector, []).append(float(r))
+
+    result: Dict[str, Dict[str, float]] = {}
+    for date_key, sectors in by_date_sector.items():
+        qualifying = {
+            sector: sum(vals) / len(vals)
+            for sector, vals in sectors.items()
+            if len(vals) >= min_sector_size
+        }
+        if qualifying:
+            result[date_key] = qualifying
+    return result
+
+
+def compute_sector_strength(
+    sector_returns_by_date: Dict[str, Dict[str, float]],
+    sector_map: Dict[str, str],
+    code: str,
+    date_key: str,
+    *,
+    top_frac: float = 0.3,
+) -> bool:
+    """True if code's sector's trailing return ranks in the top top_frac of all sectors with
+    enough sample size that date. Fails closed (False) if code is unmapped or its sector didn't
+    meet build_sector_returns_by_date's minimum sample size that date."""
+    sector = sector_map.get(code)
+    if not sector:
+        return False
+    sectors_today = sector_returns_by_date.get(date_key)
+    if not sectors_today or sector not in sectors_today:
+        return False
+    ranked = sorted(sectors_today.values(), reverse=True)
+    cutoff_idx = max(0, int(len(ranked) * top_frac) - 1)
+    threshold = ranked[cutoff_idx]
+    return sectors_today[sector] >= threshold
