@@ -60,6 +60,11 @@ def fetch_sector_snapshot(
         resp = requests.get(_LIST_URL, headers=_HEADERS, timeout=20)
         resp.raise_for_status()
         group_nos = _GROUP_NO_RE.findall(resp.text)
+        if not group_nos:
+            # Zero groups parsed (regex/markup mismatch, layout change, soft anti-bot
+            # response, ...) is a failure, not "no sectors exist" - don't cache it, or
+            # a transient parse failure would poison the cache with {} forever.
+            return {}
         if min_sleep_s > 0:
             time.sleep(min_sleep_s)
 

@@ -51,6 +51,19 @@ def test_fetch_sector_snapshot_parses_groups_and_builds_code_to_group_mapping(mo
     assert result == {"000001": "274", "000002": "274", "033780": "275"}
 
 
+def test_fetch_sector_snapshot_zero_groups_parsed_does_not_cache(monkeypatch, tmp_path):
+    """If the list page yields zero group links (regex/markup mismatch, layout change,
+    soft anti-bot response, ...), that's a failure, not "no sectors exist" - must not
+    write an empty {} to the cache, so a later retry can still succeed."""
+    monkeypatch.setattr(
+        "backtest.krx_sector_snapshot.requests.get",
+        _fake_get_factory("<html>no group links here</html>", {}),
+    )
+    result = fetch_sector_snapshot("20240105", cache_dir=tmp_path, min_sleep_s=0)
+    assert result == {}
+    assert not (tmp_path / "20240105.json").exists()
+
+
 def test_fetch_sector_snapshot_returns_empty_dict_on_request_failure(monkeypatch, tmp_path):
     def raise_error(*a, **k):
         raise Exception("boom")
