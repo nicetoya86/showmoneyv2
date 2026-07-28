@@ -1,26 +1,39 @@
 """
-One-time KRX stock-code -> sector-classification snapshot, used by
-backtest/candidate_signals.py's sector-relative-strength signal. Mirrors
-backtest/krx_supply_history.py's request/cache/error-handling style exactly, and mirrors the
-sector-code parsing already dead-code in production (src/swing-scanner.src.js:1017-1019:
-`IDX_IND_NM || SECT_TP_NM`, first 6 characters).
+Stock-code -> sector-classification snapshot, used by
+backtest/candidate_signals.py's sector-relative-strength signal.
+
+Sourced from Naver Finance's industry-group pages (finance.naver.com/sise/sise_group*),
+not data.krx.co.kr: the KRX bldAttendant/getJsonData.cmd JSON API (used originally, and
+still used by backtest/krx_supply_history.py) is gated behind an anti-bot/session-registration
+flow that this environment's plain requests.post cannot pass (HTTP 400 "LOGOUT" even with
+production's exact headers). Naver's HTML pages require no session dance - plain GETs work.
+
+Because Naver's grouping has no historical `trdDd`/date parameter, this is a single current
+snapshot, not true point-in-time history - `trd_dd` is kept only as the cache filename key
+(same as before), so callers/signature are unchanged. This realizes, rather than introduces,
+the "sector classification is a single static snapshot" limitation already accepted in the
+design doc.
 """
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from typing import Dict
 
 import requests
 
-_URL = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+_LIST_URL = "https://finance.naver.com/sise/sise_group.naver?type=upjong"
+_DETAIL_URL = "https://finance.naver.com/sise/sise_group_detail.naver?type=upjong&no={no}"
 _HEADERS = {
-    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    "Origin": "https://data.krx.co.kr",
-    "Referer": "https://data.krx.co.kr/",
     "User-Agent": "Mozilla/5.0",
+    "Referer": "https://finance.naver.com/",
+    "Accept": "text/html",
+    "Accept-Charset": "utf-8",
 }
+_GROUP_NO_RE = re.compile(r"sise_group_detail\.naver\?type=upjong&no=(\d+)")
+_CODE_RE = re.compile(r"code=(\d{6})")
 
 
 def fetch_sector_snapshot(
@@ -29,7 +42,12 @@ def fetch_sector_snapshot(
     cache_dir: Path = Path("backtest/cache/krx_sector"),
     min_sleep_s: float = 0.2,
 ) -> Dict[str, str]:
-    """Stock code -> 6-char sector code, for one KRX trading day (market-wide, 1 call)."""
+    """Stock code -> Naver industry-group number (as a string), e.g. "275".
+
+    Not a true point-in-time historical snapshot: Naver's industry grouping has no
+    date parameter, so this is always the *current* group snapshot, merely cached
+    under the given `trd_dd` key (same cache-key contract as before).
+    """
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{trd_dd}.json"
     if cache_path.exists():
@@ -39,32 +57,27 @@ def fetch_sector_snapshot(
             pass
 
     try:
-        body = f"bld=dbms/MDC/STAT/standard/MDCSTAT01501&mktId=ALL&trdDd={trd_dd}&share=1&money=1&csvxls_isNo=false"
-        resp = requests.post(_URL, headers=_HEADERS, data=body, timeout=20)
+        resp = requests.get(_LIST_URL, headers=_HEADERS, timeout=20)
         resp.raise_for_status()
-        resp_data = resp.json() or {}
-        rows = resp_data.get("output")
-        if rows is None:
-            rows = resp_data.get("OutBlock_1")
-        if rows is None:
-            rows = []
+        group_nos = _GROUP_NO_RE.findall(resp.text)
+        if min_sleep_s > 0:
+            time.sleep(min_sleep_s)
 
         result: Dict[str, str] = {}
-        for row in rows:
-            code = str(row.get("ISU_SRT_CD") or "").strip()
-            if not code:
-                continue
-            sector = str(row.get("IDX_IND_NM") or row.get("SECT_TP_NM") or "").strip()[:6]
-            if sector:
-                result[code] = sector
+        for no in group_nos:
+            detail_resp = requests.get(_DETAIL_URL.format(no=no), headers=_HEADERS, timeout=20)
+            detail_resp.raise_for_status()
+            codes = dict.fromkeys(_CODE_RE.findall(detail_resp.text))
+            for code in codes:
+                result[code] = no
+            if min_sleep_s > 0:
+                time.sleep(min_sleep_s)
 
         try:
             cache_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         except Exception:
             pass
 
-        if min_sleep_s > 0:
-            time.sleep(min_sleep_s)
         return result
     except Exception:
         return {}

@@ -4,70 +4,72 @@ from backtest.krx_sector_snapshot import fetch_sector_snapshot
 
 
 class _FakeResp:
-    def __init__(self, payload):
-        self._payload = payload
+    def __init__(self, text):
+        self.text = text
 
     def raise_for_status(self):
         pass
 
-    def json(self):
-        return self._payload
+
+_LIST_HTML = """
+<a href="/sise/sise_group_detail.naver?type=upjong&no=274">A</a>
+<a href="/sise/sise_group_detail.naver?type=upjong&no=275">B</a>
+"""
 
 
-def test_fetch_sector_snapshot_parses_code_and_truncates_sector_to_6_chars(monkeypatch, tmp_path):
-    payload = {
-        "output": [
-            {"ISU_SRT_CD": "000001", "IDX_IND_NM": "ABCDEFGHIJ"},
-            {"ISU_SRT_CD": "000002", "SECT_TP_NM": "XYZW12"},
-            {"ISU_SRT_CD": "", "IDX_IND_NM": "IGNORED_NO_CODE"},
-        ]
+def _detail_html(codes):
+    # Each code appears twice in the real page; dedupe while preserving order.
+    parts = []
+    for c in codes:
+        parts.append(f'<a href="/item/main.naver?code={c}">x</a>')
+        parts.append(f'<a href="/item/board.naver?code={c}">y</a>')
+    return "\n".join(parts)
+
+
+def _fake_get_factory(list_html, detail_by_no):
+    def fake_get(url, headers=None, **kwargs):
+        if "sise_group.naver" in url and "no=" not in url:
+            return _FakeResp(list_html)
+        for no, html in detail_by_no.items():
+            if f"no={no}" in url:
+                return _FakeResp(html)
+        return _FakeResp("")
+
+    return fake_get
+
+
+def test_fetch_sector_snapshot_parses_groups_and_builds_code_to_group_mapping(monkeypatch, tmp_path):
+    detail_by_no = {
+        "274": _detail_html(["000001", "000002"]),
+        "275": _detail_html(["033780"]),
     }
     monkeypatch.setattr(
-        "backtest.krx_sector_snapshot.requests.post",
-        lambda *a, **k: _FakeResp(payload),
+        "backtest.krx_sector_snapshot.requests.get",
+        _fake_get_factory(_LIST_HTML, detail_by_no),
     )
     result = fetch_sector_snapshot("20240102", cache_dir=tmp_path, min_sleep_s=0)
-    assert result == {"000001": "ABCDEF", "000002": "XYZW12"}
+    assert result == {"000001": "274", "000002": "274", "033780": "275"}
 
 
 def test_fetch_sector_snapshot_returns_empty_dict_on_request_failure(monkeypatch, tmp_path):
     def raise_error(*a, **k):
         raise Exception("boom")
 
-    monkeypatch.setattr("backtest.krx_sector_snapshot.requests.post", raise_error)
+    monkeypatch.setattr("backtest.krx_sector_snapshot.requests.get", raise_error)
     result = fetch_sector_snapshot("20240102", cache_dir=tmp_path, min_sleep_s=0)
     assert result == {}
 
 
 def test_fetch_sector_snapshot_uses_disk_cache(monkeypatch, tmp_path):
     cache_path = tmp_path / "20240102.json"
-    cache_path.write_text(json.dumps({"000009": "CACHED"}), encoding="utf-8")
+    cache_path.write_text(json.dumps({"000009": "999"}), encoding="utf-8")
 
     def fail_if_called(*a, **k):
         raise AssertionError("should not hit network when cache exists")
 
-    monkeypatch.setattr("backtest.krx_sector_snapshot.requests.post", fail_if_called)
+    monkeypatch.setattr("backtest.krx_sector_snapshot.requests.get", fail_if_called)
     result = fetch_sector_snapshot("20240102", cache_dir=tmp_path, min_sleep_s=0)
-    assert result == {"000009": "CACHED"}
-
-
-def test_fetch_sector_snapshot_fallback_to_outblock_1(monkeypatch, tmp_path):
-    """Test that OutBlock_1 is used when output key is missing."""
-    payload = {
-        # Note: no "output" key, only OutBlock_1
-        "OutBlock_1": [
-            {"ISU_SRT_CD": "000001", "IDX_IND_NM": "SECTOR"},
-            {"ISU_SRT_CD": "000002", "SECT_TP_NM": "ABCDEF"},
-        ]
-    }
-    monkeypatch.setattr(
-        "backtest.krx_sector_snapshot.requests.post",
-        lambda *a, **k: _FakeResp(payload),
-    )
-    result = fetch_sector_snapshot("20240103", cache_dir=tmp_path, min_sleep_s=0)
-    assert result == {"000001": "SECTOR", "000002": "ABCDEF"}
-
-    assert (tmp_path / "20240103.json").exists()
+    assert result == {"000009": "999"}
 
 
 def test_fetch_sector_snapshot_corrupted_cache_falls_back_to_network(monkeypatch, tmp_path):
@@ -77,18 +79,14 @@ def test_fetch_sector_snapshot_corrupted_cache_falls_back_to_network(monkeypatch
     corrupted_path = tmp_path / "20240104.json"
     corrupted_path.write_text('{"000001": "SECTOR', encoding="utf-8")  # truncated JSON
 
-    payload = {
-        "output": [
-            {"ISU_SRT_CD": "000001", "IDX_IND_NM": "NEWSEC"},
-        ]
-    }
+    detail_by_no = {"274": _detail_html(["000001"])}
     monkeypatch.setattr(
-        "backtest.krx_sector_snapshot.requests.post",
-        lambda *a, **k: _FakeResp(payload),
+        "backtest.krx_sector_snapshot.requests.get",
+        _fake_get_factory(_LIST_HTML, detail_by_no),
     )
     result = fetch_sector_snapshot("20240104", cache_dir=tmp_path, min_sleep_s=0)
     # Falls through to network fetch instead of raising.
-    assert result == {"000001": "NEWSEC"}
+    assert result == {"000001": "274"}
 
     # Self-heals: the corrupted cache file is overwritten with valid JSON.
-    assert json.loads(corrupted_path.read_text(encoding="utf-8"))["000001"] == "NEWSEC"
+    assert json.loads(corrupted_path.read_text(encoding="utf-8"))["000001"] == "274"
