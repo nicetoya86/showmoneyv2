@@ -112,11 +112,12 @@ though it never crosses into profit. Read off the test-`cagr_15slot` column abov
 
 This improvement is **driven almost entirely by `vol_contraction`**, not by all three tags equally.
 Compare the subsets that omit `vol_contraction` — `trend_aligned` alone (-25.52%/yr test),
-`sector_strong` alone (-28.70%/yr, actually the *worst* single-tag result, slightly worse than no
-filter at all), and `trend_aligned+sector_strong` (-28.25%/yr, barely different from no filter) —
-against every subset that includes `vol_contraction`, all of which land in the -7.79% to -16.21%/yr
-range. `sector_strong` in particular adds little to no improvement on its own or paired with
-`trend_aligned`, consistent with the sector-strength selectivity caveat in §5 below. The
+`sector_strong` alone (-28.70%/yr, the *weakest* single-tag result — barely distinguishable from
+the -29.59%/yr no-filter baseline), and `trend_aligned+sector_strong` (-28.25%/yr, also barely
+different from no filter) — against every subset that includes `vol_contraction`, all of which land
+in the -7.79% to -16.21%/yr range. `sector_strong` in particular adds essentially no improvement on
+its own or paired with `trend_aligned`, consistent with the sector-strength selectivity caveat in
+§5 below. The
 "monotonic improvement with more tags" framing is only approximately true — it holds cleanly along
 the paths that include `vol_contraction`, but adding `sector_strong` to a `vol_contraction`-based
 subset (`vol_contraction+sector_strong`, -14.03%/yr) is very slightly *worse* than
