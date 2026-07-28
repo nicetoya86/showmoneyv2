@@ -11,7 +11,7 @@ the target price -- which is NOT the same metric as run_swing_v2_backtest.py's w
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 import pandas as pd
 
@@ -48,7 +48,10 @@ def run_one_config(
     regime_lookup: Dict[str, int],
     start: str,
     end: str,
+    required_tags: FrozenSet[str] = frozenset(),
+    tags_lookup: Optional[Dict[Tuple[str, str], Dict[str, bool]]] = None,
 ) -> Dict[str, Any]:
+    tags_lookup = tags_lookup or {}
     start_ts = pd.to_datetime(start, utc=True)
     end_ts = pd.to_datetime(end, utc=True)
     weeks = max((end_ts - start_ts).days / 7.0, 1e-9)
@@ -73,6 +76,10 @@ def run_one_config(
             if regime_gate:
                 level = regime_lookup.get(day.date().isoformat(), 0)
                 if level >= 2 and c.grade != "강매":
+                    continue
+            if required_tags:
+                candidate_tags = tags_lookup.get((c.ticker, c.date), {})
+                if not all(candidate_tags.get(tag, False) for tag in required_tags):
                     continue
             filtered.append((c.code, c))
 
@@ -174,6 +181,8 @@ def run_grid_search(
     train_end: str,
     test_start: str,
     test_end: str,
+    required_tags: FrozenSet[str] = frozenset(),
+    tags_lookup: Optional[Dict[Tuple[str, str], Dict[str, bool]]] = None,
 ) -> Dict[str, Any]:
     train_start_ts = pd.to_datetime(train_start, utc=True)
     train_end_ts = pd.to_datetime(train_end, utc=True)
@@ -185,7 +194,8 @@ def run_grid_search(
     grid = build_grid()
     train_results = [
         run_one_config(
-            train_candidates, regime_lookup=regime_lookup, start=train_start, end=train_end, **cell
+            train_candidates, regime_lookup=regime_lookup, start=train_start, end=train_end,
+            required_tags=required_tags, tags_lookup=tags_lookup, **cell
         )
         for cell in grid
     ]
@@ -195,5 +205,6 @@ def run_grid_search(
         test_candidates, regime_lookup=regime_lookup, start=test_start, end=test_end,
         target_pct=chosen["target_pct"], stop_pct=chosen["stop_pct"], min_score=chosen["min_score"],
         regime_gate=chosen["regime_gate"], exclude_d_box=chosen["exclude_d_box"],
+        required_tags=required_tags, tags_lookup=tags_lookup,
     )
     return {"train_results": train_results, "selection": selection, "test_result": test_result}

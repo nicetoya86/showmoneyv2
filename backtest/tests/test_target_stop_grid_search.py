@@ -173,3 +173,58 @@ def test_run_grid_search_train_test_split_and_selection(monkeypatch):
     # the 2024-06-30 candidate is train-only, the 2024-07-01 candidate is test-only
     assert result["test_result"]["n_trades"] in (0, 1)
     assert "selection" in result
+
+
+def test_required_tags_filters_out_untagged_candidates():
+    day = "2024-01-02T00:00:00+00:00"
+    tagged = _make_candidate("000001", day, score=95)
+    untagged = _make_candidate("000002", day, score=95)
+    tags_lookup = {
+        ("000001.KS", day): {"trend_aligned": True},
+        ("000002.KS", day): {"trend_aligned": False},
+    }
+    result = run_one_config(
+        [tagged, untagged], target_pct=0.03, stop_pct=0.02, min_score=60,
+        regime_gate=False, exclude_d_box=False, regime_lookup={},
+        start="2024-01-01", end="2024-01-05",
+        required_tags=frozenset({"trend_aligned"}), tags_lookup=tags_lookup,
+    )
+    assert result["n_trades"] == 1
+
+
+def test_required_tags_empty_reproduces_unfiltered_behavior():
+    day = "2024-01-02T00:00:00+00:00"
+    a = _make_candidate("000001", day, score=95)
+    b = _make_candidate("000002", day, score=95)
+    result = run_one_config(
+        [a, b], target_pct=0.03, stop_pct=0.02, min_score=60,
+        regime_gate=False, exclude_d_box=False, regime_lookup={},
+        start="2024-01-01", end="2024-01-05",
+    )
+    assert result["n_trades"] == 2
+
+
+def test_run_grid_search_passes_required_tags_through():
+    def make(code, date, score=100, entry=100.0):
+        return CachedCandidate(
+            ticker=f"{code}.KS", code=code, date=date, entry=entry,
+            pattern_type="C촉매", score=score, rank_score=score, grade="매수",
+            hold_days=3,
+            window_open=[entry, entry, entry], window_high=[entry * 1.05] * 3,
+            window_low=[entry * 0.97] * 3, window_close=[entry] * 3,
+        )
+
+    day = "2024-06-30T00:00:00+00:00"
+    tagged = make("000001", day)
+    untagged = make("000002", day)
+    tags_lookup = {
+        ("000001.KS", day): {"trend_aligned": True},
+        ("000002.KS", day): {"trend_aligned": False},
+    }
+    result = run_grid_search(
+        [tagged, untagged], regime_lookup={},
+        train_start="2024-01-01", train_end="2024-06-30",
+        test_start="2024-07-01", test_end="2024-12-31",
+        required_tags=frozenset({"trend_aligned"}), tags_lookup=tags_lookup,
+    )
+    assert all(r["n_trades"] <= 1 for r in result["train_results"])
