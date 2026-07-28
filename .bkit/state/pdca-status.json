@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-07-25T11:27:11.346Z",
+  "lastUpdated": "2026-07-28T13:14:49.049Z",
   "activeFeatures": [
     "showmoneyv2",
     "scripts",
@@ -10,7 +10,9 @@
     "showmoneyv2 — Gap Analysis",
     "risk-blacklist-toss-api",
     "theme-blacklist-political-filter",
-    "scratchpad"
+    "scratchpad",
+    "tests",
+    "swing-algo-profitability-review"
   ],
   "primaryFeature": "showmoneyv2",
   "features": {
@@ -80,15 +82,19 @@
     "backtest": {
       "phase": "do",
       "phaseNumber": 3,
-      "matchRate": null,
+      "matchRate": 100,
       "iterationCount": 0,
       "requirements": [],
-      "documents": {},
+      "documents": {
+        "plan": "docs/superpowers/plans/2026-07-26-swing-algo-realistic-backtest-foundation.md",
+        "design": "docs/superpowers/specs/2026-07-26-swing-algo-realistic-backtest-foundation-design.md",
+        "analysis": "docs/03-analysis/backtest.analysis.md"
+      },
       "timestamps": {
         "started": "2026-04-19T06:37:56.243Z",
-        "lastUpdated": "2026-04-19T06:41:07.759Z"
+        "lastUpdated": "2026-07-28T13:14:17.927Z"
       },
-      "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\simulate_current.py"
+      "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\analyze_portfolio_return.py"
     },
     "swing-nodup-fund-exclude": {
       "phase": "check",
@@ -197,9 +203,35 @@
       "documents": {},
       "timestamps": {
         "started": "2026-07-14T13:18:17.600Z",
-        "lastUpdated": "2026-07-25T11:02:21.952Z"
+        "lastUpdated": "2026-07-25T12:27:40.831Z"
       },
-      "lastFile": "C:\\Users\\nicet\\AppData\\Local\\Temp\\claude\\D--vibecording-showmoneyv2\\3b974410-0638-43c6-8acc-e1ca113fb28c\\scratchpad\\simulate_weekly_report.js"
+      "lastFile": "C:\\Users\\nicet\\AppData\\Local\\Temp\\claude\\D--vibecording-showmoneyv2\\3b974410-0638-43c6-8acc-e1ca113fb28c\\scratchpad\\verify.js"
+    },
+    "tests": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-07-25T12:12:11.648Z",
+        "lastUpdated": "2026-07-28T13:14:49.049Z"
+      },
+      "lastFile": "D:\\vibecording\\showmoneyv2\\backtest\\tests\\test_analyze_portfolio_return.py"
+    },
+    "swing-algo-profitability-review": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-07-25T12:14:19.645Z",
+        "lastUpdated": "2026-07-26T03:33:46.577Z"
+      },
+      "lastFile": "D:\\vibecording\\showmoneyv2\\.claude\\worktrees\\swing-algo-profitability-review\\verify_fixes_simple.py"
     }
   },
   "pipeline": {
@@ -210,7 +242,7 @@
   "session": {
     "startedAt": "2026-03-08T14:53:57.237Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-07-25T11:27:11.346Z"
+    "lastActivity": "2026-07-28T13:14:49.049Z"
   },
   "history": [
     {
@@ -1950,6 +1982,678 @@
     {
       "timestamp": "2026-07-25T11:27:11.345Z",
       "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:12:11.648Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:12:20.750Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:12:44.939Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:12:58.676Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:13:15.257Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:13:26.952Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:13:43.549Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:13:50.296Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:14:19.645Z",
+      "feature": "swing-algo-profitability-review",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:14:31.581Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:21:39.625Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:21:59.234Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:22:19.762Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:22:43.814Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:22:45.781Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:22:45.798Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:22:46.807Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:22:48.751Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:23:06.280Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:23:26.139Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:23:27.184Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:23:28.257Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:23:29.698Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:23:36.621Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:23:53.332Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:13.048Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:19.620Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:30.408Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:35.567Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:39.439Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:40.881Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:44.986Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:48.864Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:24:53.033Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:27:40.831Z",
+      "feature": "scratchpad",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:30:11.508Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:30:34.290Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:30:35.397Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:34:34.197Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:34:46.089Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:38:55.517Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:38:56.063Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:39:05.822Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:44:54.181Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:45:14.241Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:51:15.521Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T12:51:38.299Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:00:49.844Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:00:53.795Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:01:03.342Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:01:08.059Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:01:18.132Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:06:02.085Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:06:21.538Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T13:06:32.505Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T14:19:36.955Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-25T14:20:25.103Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:10:04.686Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:10:17.750Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:15:05.277Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:15:17.710Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:15:19.427Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:17:46.648Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:18:24.834Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:21:05.749Z",
+      "feature": "swing-algo-profitability-review",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:31:53.183Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:31:56.812Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:32:00.771Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:32:04.594Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:32:13.244Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:32:35.051Z",
+      "feature": "swing-algo-profitability-review",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:33:03.544Z",
+      "feature": "swing-algo-profitability-review",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:33:28.207Z",
+      "feature": "swing-algo-profitability-review",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:33:46.577Z",
+      "feature": "swing-algo-profitability-review",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:44:56.098Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:45:01.181Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:45:05.005Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:45:08.863Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:45:57.914Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:46:10.343Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:54:45.711Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T03:54:59.147Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T04:26:58.596Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T04:27:13.009Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T04:30:35.631Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:12:25.737Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:13:14.045Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:13:21.912Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:13:28.637Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:13:41.696Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:14:22.723Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:14:28.604Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:14:33.380Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:14:51.711Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:15:22.599Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T05:15:29.673Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:23:04.373Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:23:19.492Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:26:33.110Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:26:50.816Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:30:07.778Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:30:19.577Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:33:01.093Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:33:17.193Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:33:24.090Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:33:39.898Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:33:48.994Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:33:53.769Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-26T12:33:57.916Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-27T12:41:01.566Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-28T13:14:17.927Z",
+      "feature": "backtest",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-07-28T13:14:49.049Z",
+      "feature": "tests",
       "phase": "do",
       "action": "updated"
     }

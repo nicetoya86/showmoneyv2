@@ -120,12 +120,24 @@ the corrected bar count.
 ### `backtest/run_swing_v2_backtest.py` (existing, wiring change only)
 
 Wire the two new functions into the existing per-day loop: after `evaluate_candidate` produces a
-candidate and before `apply_daily_selection`/`simulate_exit`, look up the candidate's ticker's
-next trading day's open (already available in the per-ticker DataFrame already loaded for exit
-simulation — no new data fetch needed) and call `apply_toss_liveprice`. Blocked candidates never
-reach `apply_daily_selection`. After `simulate_exit` returns a raw pnl, pass it through
-`apply_round_trip_cost` before recording the trade. No other change to this file's existing,
-already-reviewed selection-cap logic.
+candidate and before `simulate_exit`, look up the candidate's ticker's next trading day's open
+(already available in the per-ticker DataFrame already loaded for exit simulation — no new data
+fetch needed) and call `apply_toss_liveprice`. Blocked candidates never reach `simulate_exit`.
+After `simulate_exit` returns a raw pnl, pass it through `apply_round_trip_cost` before recording
+the trade. No other change to this file's existing, already-reviewed selection-cap logic.
+
+**[Reconciled post-implementation]** The actual wiring places the TOSS check *after*
+`apply_daily_selection` (inside the `for code, cand in selected:` loop), not before it as this
+paragraph originally said — this matches what Task 4 of the implementation plan specified, but
+this design paragraph was never updated to match. The practical effect: a TOSS-blocked candidate
+still consumes its weekly-send-quota slot in this backtest, whereas production only books the
+slot on a successful send (`src/swing-scanner.src.js:1825`), so production would refill that slot
+with the next-ranked candidate and this backtest does not. Measured impact and full analysis:
+`docs/03-analysis/swing-algorithm-profitability-review.analysis.md`, "TOSS-blocked candidates
+consume this backtest's weekly send quota; production's do not" (~109 of 2,686 trades, ≈4%).
+Moving the check before selection to close this gap is deferred to sub-project 2, since it
+changes which candidates are selected per week and thus overlaps with that sub-project's planned
+re-tuning work rather than being a pure fidelity fix.
 
 ### Universe/date-range expansion
 

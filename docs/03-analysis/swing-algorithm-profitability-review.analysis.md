@@ -1,8 +1,17 @@
 # Swing Algorithm Profitability Review
 
-**Scope:** `src/swing-scanner.src.js` (production swing-recommendation engine) — code-review + empirical backtest (200 KRX tickers, 2024-01-01 ~ 2026-01-01).
+**Scope:** `src/swing-scanner.src.js` (production swing-recommendation engine) — code-review + empirical backtest (200 KRX tickers, 2024-01-01 ~ 2026-01-01 for the original naive/crude-approximation runs below; superseded by a TOSS-aware + fee-aware re-run over 959 tickers, 2022-01-01 ~ 2026-01-01 — see "Entry-model comparison" under Empirical Backtest Results).
 
 ## Executive Summary
+
+> **[Superseded — read this first]** The numbers in this section reflect the *original* naive
+> entry-fill model (signal-day close, no transaction costs, 200 tickers / 2 years) and are kept
+> for historical traceability. The realistic, TOSS-LIVEPRICE-aware and fee-aware re-run over the
+> full 959-ticker universe and a 4-year window found the edge to be **negative: -0.478% avg PnL /
+> trade, 32.17% win rate** (2,686 trades) — see "Entry-model comparison: naive vs. crude
+> approximation vs. TOSS-aware + fee-aware" under Empirical Backtest Results for the full
+> three-way comparison and interpretation. Do not use the +0.89%/+0.14% figures below as the
+> algorithm's current best-estimate edge.
 
 | Item | Value |
 |---|---|
@@ -189,6 +198,51 @@ this document (see Executive Summary / Limitations) — they describe what happe
 sequentially bets its entire balance on every trade in a row, not a claim that a realistically
 diversified portfolio running this strategy would go to zero.
 
+### Portfolio-level expected annual return (diversified account, current algorithm version)
+
+The naive single-account `mdd`/`equity_end` above and the crude round-robin figures below are
+both stand-ins for "what would a real follower's account do" — production itself defines no
+position-sizing rule (it is a recommendation feed, not an execution/allocation engine), so any
+answer requires an explicit, documented assumption. `backtest/analyze_portfolio_return.py` (new,
+2026-07-27) takes the same 2,686 realistic (TOSS-aware, fee-aware) trades used above, sorts them
+chronologically, round-robins them across *N* equal-capital slots (approximating an account that
+runs *N* concurrent positions, each re-invested into the next trade as it frees up), and computes
+a real CAGR and MDD from the resulting equity curve — instead of the single-slot (N=1) model that
+produces the degenerate -100%/~0 figures above. This is still a modeling choice, not a measured
+fact: round-robin-by-date-order approximates concurrent occupancy but does not reconstruct exact
+calendar overlap.
+
+| N slots | Final equity (of 1.0 start) | Total return | CAGR | MDD |
+|---|---|---|---|---|
+| 5 | 0.027 | -97.30% | -59.58% | -97.33% |
+| 10 | 0.171 | -82.92% | -35.81% | -82.92% |
+| **15** (matches `MAX_WEEKLY_SENDS`) | **0.301** | **-69.94%** | **-26.03%** | **-70.00%** |
+| 20 | 0.456 | -54.42% | -17.89% | -55.34% |
+| 30 | 0.593 | -40.70% | -12.29% | -40.84% |
+| 50 | 0.743 | -25.66% | -7.17% | -25.71% |
+| 100 | 0.879 | -12.10% | -3.18% | -12.46% |
+| 200 | 0.936 | -6.39% | -1.64% | -6.40% |
+
+N=15 is the primary scenario because it is the only concurrency-relevant constant production
+actually defines (`MAX_WEEKLY_SENDS = 15`, `src/swing-scanner.src.js:24`) — a follower trying to
+act on every recommendation the current algorithm generates would realistically be running on the
+order of 15 concurrent positions, not hundreds. Under that assumption, **the expected annualized
+return of the current algorithm version is approximately -26% per year**, with a max drawdown
+around -70%. Even the most generous over-diversification scenario tested (N=200, which is not
+achievable in practice given the 15/week signal cap) still lands at roughly -1.6%/year — negative
+under every diversification level modeled. This is consistent with, not contradictory to, the
+-0.478% per-trade average above: at ~45 trades/slot/year (2,686 trades / 15 slots / ~4 years), a
+per-trade edge this negative compounds into a large annual loss, and realized losses run somewhat
+worse than the trade-average would naively suggest (compounding a negatively-skewed return stream
+— frequent -4.2% stop-outs against fewer, larger wins — costs more than the arithmetic mean
+implies).
+
+**Bottom line:** based on the current, un-retuned algorithm (`src/swing-scanner.src.js`, no
+scoring/pattern/regime changes — those are deferred to sub-project 2), a realistic
+diversified-account expected return is negative, not positive, across every tested diversification
+level. There is no reading of this data in which the current version of the algorithm has a
+positive expected annual return.
+
 ## Limitations
 
 - **[Historical — describes the original 200-ticker/2-year naive and crude-approximation
@@ -253,11 +307,17 @@ diversified portfolio running this strategy would go to zero.
   "최대 N거래일" semantics exactly (hold_days counts the entry day itself as day 1). This was a
   real defect and it was fixed in code; the TOSS-aware run in the Entry-model comparison table
   above reflects the corrected hold-days logic.
-- Toss real-time order-book confirmation not modeled on the trade-count side (see Finding 5)
-  — live *trade count* is plausibly lower than backtested trade count to the extent Toss
-  successfully filters bad fills. Separately, and more materially, `TOSS-LIVEPRICE`'s
-  entry-rebasing/blocking behavior is also not modeled — see Finding 5 for why this makes the
-  backtest's PnL an upper bound, not a lower bound, on what production would actually realize.
+- Toss real-time order-book confirmation (the separate ask/bid-ratio block and pattern-C
+  weak-buy-ratio block, `TOSS_ASK_BID_BLOCK_RATIO`/`TOSS_WEAK_BUY_RATIO_C`) is still not modeled
+  on the trade-count side (see Finding 5) — live *trade count* is plausibly lower than backtested
+  trade count to the extent Toss successfully filters bad fills on those two checks, which need
+  real-time orderbook/trade-tape data with no historical equivalent (out of scope, see
+  `backtest/toss_liveprice.py`'s module docstring). **[Historical — TOSS-LIVEPRICE's
+  entry-rebasing/blocking behavior specifically (the live-price block/rebase, as opposed to the
+  two orderbook checks above) is now modeled by this plan]** the prior version of this bullet said
+  entry-rebasing/blocking was also unmodeled and made the backtest's PnL an upper bound; that is
+  no longer true for the TOSS-aware run in the Entry-model comparison table, which reconstructs
+  that behavior via `apply_toss_liveprice()`.
 - **TOSS-blocked candidates consume this backtest's weekly send quota; production's do not.**
   In `backtest/run_swing_v2_backtest.py`, `apply_daily_selection()` (line 117) increments the
   weekly count/dedup-set for every selected candidate *before* the TOSS block check runs later
