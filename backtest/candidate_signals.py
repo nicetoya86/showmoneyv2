@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
+from .generate_signal_candidates import CachedCandidate
 from .indicators import atr as calc_atr
 from .run_swing_v2_backtest import _iso_week_key
 
@@ -136,3 +137,34 @@ def compute_sector_strength(
     cutoff_idx = max(0, int(len(ranked) * top_frac) - 1)
     threshold = ranked[cutoff_idx]
     return sectors_today[sector] >= threshold
+
+
+def tag_candidates(
+    candidates: List[CachedCandidate],
+    per_ticker_ohlcv: Dict[str, pd.DataFrame],
+    sector_map: Dict[str, str],
+) -> Dict[Tuple[str, str], Dict[str, bool]]:
+    """(ticker, date) -> {trend_aligned, vol_contraction, sector_strong}. Fails closed (all False)
+    for a candidate whose ticker/date can't be located in per_ticker_ohlcv, rather than raising --
+    matches this codebase's existing fail-closed conventions (TOSS blocking, sector min-sample)."""
+    sector_returns_by_date = build_sector_returns_by_date(sector_map, per_ticker_ohlcv)
+    closed = {"trend_aligned": False, "vol_contraction": False, "sector_strong": False}
+
+    tags: Dict[Tuple[str, str], Dict[str, bool]] = {}
+    for c in candidates:
+        df = per_ticker_ohlcv.get(c.ticker)
+        if df is None:
+            tags[(c.ticker, c.date)] = dict(closed)
+            continue
+        idxs = df.index[df["timestamp_utc"] == pd.Timestamp(c.date)].tolist()
+        if not idxs:
+            tags[(c.ticker, c.date)] = dict(closed)
+            continue
+        idx = int(idxs[0])
+        date_key = pd.Timestamp(c.date).date().isoformat()
+        tags[(c.ticker, c.date)] = {
+            "trend_aligned": compute_trend_alignment(df, idx),
+            "vol_contraction": compute_vol_contraction(df, idx),
+            "sector_strong": compute_sector_strength(sector_returns_by_date, sector_map, c.code, date_key),
+        }
+    return tags

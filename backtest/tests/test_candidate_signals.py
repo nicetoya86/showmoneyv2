@@ -5,7 +5,9 @@ from backtest.candidate_signals import (
     compute_vol_contraction,
     build_sector_returns_by_date,
     compute_sector_strength,
+    tag_candidates,
 )
+from backtest.generate_signal_candidates import CachedCandidate
 
 
 def _ohlcv_df(dates, opens, highs, lows, closes):
@@ -119,3 +121,34 @@ def test_compute_sector_strength_false_when_unmapped_or_below_min_sample():
     # CODE's sector ("S9") isn't present that date -- either unmapped upstream or filtered
     # out by build_sector_returns_by_date's min_sector_size gate.
     assert compute_sector_strength(sector_returns_by_date, {"CODE": "S9"}, "CODE", "2024-01-30") is False
+
+
+def test_tag_candidates_keys_by_ticker_and_date_and_fails_closed_when_untradeable():
+    dates = pd.bdate_range("2024-01-01", periods=65, tz="UTC")
+    closes = [100.0 + i for i in range(65)]
+    df = _flat_ohlcv_df(dates, closes)
+    candidate_date = dates[-1].isoformat()
+
+    candidate = CachedCandidate(
+        ticker="000001.KS", code="000001", date=candidate_date, entry=164.0,
+        pattern_type="C촉매", score=100, rank_score=100, grade="매수", hold_days=3,
+        window_open=[164.0], window_high=[165.0], window_low=[163.0], window_close=[164.0],
+    )
+    missing_df_candidate = CachedCandidate(
+        ticker="999999.KQ", code="999999", date=candidate_date, entry=100.0,
+        pattern_type="C촉매", score=100, rank_score=100, grade="매수", hold_days=3,
+        window_open=[100.0], window_high=[101.0], window_low=[99.0], window_close=[100.0],
+    )
+
+    tags = tag_candidates(
+        [candidate, missing_df_candidate],
+        per_ticker_ohlcv={"000001.KS": df},
+        sector_map={},
+    )
+
+    assert set(tags[("000001.KS", candidate_date)].keys()) == {
+        "trend_aligned", "vol_contraction", "sector_strong",
+    }
+    assert tags[("999999.KQ", candidate_date)] == {
+        "trend_aligned": False, "vol_contraction": False, "sector_strong": False,
+    }
