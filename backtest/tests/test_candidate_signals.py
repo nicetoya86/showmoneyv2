@@ -1,6 +1,6 @@
 import pandas as pd
 
-from backtest.candidate_signals import compute_trend_alignment
+from backtest.candidate_signals import compute_trend_alignment, compute_vol_contraction
 
 
 def _ohlcv_df(dates, opens, highs, lows, closes):
@@ -34,3 +34,33 @@ def test_trend_alignment_false_with_fewer_than_10_completed_weeks():
     closes = [100.0 + i for i in range(20)]
     df = _flat_ohlcv_df(dates, closes)
     assert compute_trend_alignment(df, len(df) - 1) is False
+
+
+def test_vol_contraction_true_when_tight_before_an_excluded_recent_breakout():
+    dates = pd.bdate_range("2024-01-01", periods=80, tz="UTC")
+    closes = [100.0] * 80
+    # Tight range (high-low = 1.0) for bars 0..69 (covers the idx-60..idx-10 window);
+    # a sharp breakout range (20.0) for the excluded most-recent 10 bars (70..79).
+    highs = [100.5] * 70 + [110.0] * 10
+    lows = [99.5] * 70 + [90.0] * 10
+    df = _ohlcv_df(dates, closes, highs, lows, closes)
+    assert compute_vol_contraction(df, len(df) - 1) is True
+
+
+def test_vol_contraction_false_when_range_expands_into_the_pre_event_window():
+    dates = pd.bdate_range("2024-01-01", periods=80, tz="UTC")
+    closes = [100.0] * 80
+    # Range grows monotonically across the whole series, including inside the pre-event
+    # window itself -- the most recent pre-event point is near the window's max, not its
+    # bottom 20th percentile.
+    highs = [100.0 + 0.15 * i for i in range(80)]
+    lows = [100.0 - 0.15 * i for i in range(80)]
+    df = _ohlcv_df(dates, closes, highs, lows, closes)
+    assert compute_vol_contraction(df, len(df) - 1) is False
+
+
+def test_vol_contraction_false_with_insufficient_history():
+    dates = pd.bdate_range("2024-01-01", periods=25, tz="UTC")
+    closes = [100.0] * 25
+    df = _flat_ohlcv_df(dates, closes)
+    assert compute_vol_contraction(df, len(df) - 1) is False

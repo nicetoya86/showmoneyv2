@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
+from .indicators import atr as calc_atr
 from .run_swing_v2_backtest import _iso_week_key
 
 
@@ -39,3 +40,41 @@ def compute_trend_alignment(df: pd.DataFrame, idx: int, *, weeks: int = 10) -> b
     last_close = float(weekly_closes.iloc[-1])
     sma_val = float(weekly_closes.iloc[-weeks:].mean())
     return last_close > sma_val
+
+
+def compute_vol_contraction(
+    df: pd.DataFrame,
+    idx: int,
+    *,
+    lookback: int = 60,
+    exclude_recent: int = 10,
+    percentile: float = 0.2,
+) -> bool:
+    """True if ATR/price at idx-exclude_recent (the most recent point in the pre-event window)
+    is at or below the percentile-th percentile of that ratio over idx-lookback..idx-exclude_recent.
+    The most recent exclude_recent bars are deliberately excluded: the existing A/C/D candidate
+    patterns require a volume/price expansion to have already fired as of idx, so including those
+    bars would contradict the very definition of the candidates this is applied to."""
+    window_start = idx - lookback
+    window_end = idx - exclude_recent
+    if window_start < 0 or window_end < window_start:
+        return False
+
+    history = df.iloc[: idx + 1]
+    high = history["high"].to_numpy(dtype="float64")
+    low = history["low"].to_numpy(dtype="float64")
+    close = history["close"].to_numpy(dtype="float64")
+    atr_vals = calc_atr(high, low, close, 14)
+    ratio = atr_vals / close
+
+    window = ratio[window_start: window_end + 1]
+    window = window[~np.isnan(window)]
+    if len(window) < 20:
+        return False
+
+    current = ratio[window_end]
+    if np.isnan(current):
+        return False
+
+    threshold = float(np.quantile(window, percentile))
+    return bool(current <= threshold)
