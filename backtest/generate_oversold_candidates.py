@@ -59,7 +59,7 @@ def _is_oversold_bounce(df: pd.DataFrame, idx: int) -> bool:
     if high20 <= 0 or (close[idx] / high20 - 1.0) > -0.08:
         return False
 
-    if close[idx] <= high[idx - 1]:
+    if close[idx] <= close[idx - 1]:
         return False
 
     return True

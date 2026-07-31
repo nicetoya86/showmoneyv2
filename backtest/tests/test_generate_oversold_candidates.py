@@ -55,12 +55,22 @@ def test_is_oversold_bounce_false_when_below_sma60():
     assert mod._is_oversold_bounce(df, idx) is False
 
 
-def test_is_oversold_bounce_false_when_not_above_prior_day_high():
-    # same price path as the all-true case, but the prior day had a long upper wick
-    # (high raised well above the bounce day's close) so the breakout confirmation fails
+def test_is_oversold_bounce_false_when_not_above_prior_day_close():
+    # same price path as the all-true case, but the prior day's close (and high, to keep OHLC
+    # sane) is raised above the bounce day's close, so the breakout confirmation fails
     df, idx = _build_df(48, 950, 16, 15, 18, 13, 1067.2639)
-    df.loc[idx - 1, "high"] = 1117.2639
+    df.loc[idx - 1, "close"] = 1117.2639
+    df.loc[idx - 1, "high"] = 1117.2639 * 1.01
     assert mod._is_oversold_bounce(df, idx) is False
+
+
+def test_is_oversold_bounce_true_when_above_prior_close_but_below_prior_high():
+    # confirms the relaxed rule: prior day had a long upper wick above the bounce day's close
+    # (would have failed the old close[idx] > high[idx-1] rule), but the bounce day's close is
+    # still above the prior day's close, so the loosened confirmation now passes
+    df, idx = _build_df(48, 950, 16, 15, 18, 13, 1067.2639)
+    df.loc[idx - 1, "high"] = 1080.0
+    assert mod._is_oversold_bounce(df, idx) is True
 
 
 def test_scan_oversold_candidates_caches_window_and_fields(monkeypatch):
