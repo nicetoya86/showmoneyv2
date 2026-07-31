@@ -100,14 +100,71 @@ single day's move must be).
   test split underpowered — exactly the outcome the design doc flagged as a live possibility, not a
   hypothetical one.
 
-## 5. Next Step Recommendation
+## 5. Next Step Recommendation (superseded by Section 6 — see below)
 
 No production code (`src/swing-scanner.src.js`) has been changed by this phase — as with every prior
 sub-project, that remains a separate, later decision. Given the underpowered (not negative) verdict,
-the recommended next step is to loosen the bounce-confirmation threshold specifically (Section 3)
+the recommended next step was to loosen the bounce-confirmation threshold specifically (Section 3)
 and re-run the same scan/grid-search pipeline unmodified, rather than immediately pivoting to the
 momentum-continuation or low-volatility-accumulation hypotheses — this is a cheaper, more targeted
 next probe than starting a new hypothesis from scratch, and directly tests whether frequency (not the
-underlying oversold-bounce economics) was the binding constraint. Pivoting to a different hypothesis
-remains the fallback if a loosened confirmation bar still fails to clear `n_trades >= 50` on test.
-Any further work is pending the user's review of these results.
+underlying oversold-bounce economics) was the binding constraint. That retry was run — see Section 6.
+
+## 6. Retry: Loosened Bounce-Confirmation Threshold
+
+**Change:** `_is_oversold_bounce`'s bounce-confirmation condition was relaxed from
+`close[idx] > high[idx-1]` (close above the *entire prior day's range*) to
+`close[idx] > close[idx-1]` (close above the prior day's *close* only) — the specific loosening
+Section 3 recommended, keeping RSI depth (35), pullback depth (8%), and SMA60 context untouched.
+Everything else (universe, date range, train/test split, grid-search pipeline) is identical to the
+initial run.
+
+**Result: raw candidate count barely moved.** 119 → **127** raw candidates (+8, +6.7%) — the
+bounce-confirmation condition was evidently *not* the primary bottleneck suppressing frequency.
+
+| Split | Cell | n_trades | Reliable (n≥50)? | hit_rate | trades_per_week | cagr_15slot |
+|-------|------|---------:|:-----------------:|---------:|-----------------:|------------:|
+| Train — same cell as original selection (`target_pct=0.10, stop_pct=0.025, regime_gate=false`) | before → after | 66 → 72 | Yes → Yes | 16.7% → 15.3% | 0.51 → 0.55 | 0.38% → **-0.02%** |
+| Test — same cell | before → after | 41 → **42** | No → **No** | 26.8% → 26.2% | 0.52 → 0.54 | 2.39% → 2.45% |
+| Train — grid's own fallback selection (`best_cagr_overall`, picked independently each run) | — | 66 → 31 | Yes → **No** | 16.7% → 12.9% | 0.51 → 0.24 | 0.38% → 0.23% |
+| Test — grid's own fallback selection | — | 41 → 20 | No → No | 26.8% → 20.0% | 0.52 → 0.26 | 2.39% → 0.88% |
+
+Two things stand out:
+
+1. **Held fixed on the same cell, test `n_trades` moved 41 → 42** — one additional trade. The
+   loosening did not meaningfully close the gap to the `n_trades >= 50` reliability bar; test remains
+   underpowered.
+2. **The grid's own fallback-selection rule (`select_best_config`, "no cell clears the joint bar, so
+   pick the train cell with the single highest `cagr_15slot` across all 432 cells") picked a
+   *different, less reliable* cell this time** (`regime_gate=true, stop_pct=0.02`, train n=31, test
+   n=20) — an artifact of that selection rule being sensitive to noise in small samples, not evidence
+   the new candidates are worse. Both selected-cell views (same-cell comparison and each run's own
+   fallback pick) are reported here for transparency; the same-cell comparison is the more meaningful
+   one for judging whether the retry worked.
+
+**Verdict: the retry did not resolve the sample-size problem.** Loosening bounce-confirmation was the
+cheapest, most targeted lever available, and it moved test `n_trades` by only 1 (41→42). This is a
+genuine (not merely inconclusive) finding about *this specific lever*: the joint requirement of RSI
+depth (≤35) + pullback depth (≥8%) + SMA60 uptrend context, all coinciding on one trigger day, is the
+real constraint on frequency — not the strength of the same-day confirmation candle. Further loosening
+the confirmation clause alone (e.g. dropping it entirely) is very unlikely to add enough trades to
+matter, since it was already shown to be nearly inert (+8 raw candidates, +1 test trade).
+
+## 7. Next Step Recommendation (current)
+
+Given Section 6's result, the recommended next step is **not** a further tweak to the
+bounce-confirmation clause. Two options, in order of cost:
+
+- **(a) Loosen RSI depth or pullback depth instead** — e.g. RSI depth from ≤35 to ≤38, or pullback
+  depth from ≥8% to ≥6% — accepting that this now measurably dilutes what "oversold" or "pullback"
+  means (per Section 3's original caution), in exchange for a real chance at clearing `n_trades >= 50`
+  on test. This should be treated as testing a materially different (weaker) hypothesis, not a minor
+  retry, and reported with that framing.
+- **(b) Treat the oversold-bounce hypothesis as inconclusive at this restrictiveness and pivot** to
+  the momentum-continuation or low-volatility-accumulation hypotheses (deferred from the design doc's
+  "Explicitly out of scope" list), rather than continuing to hand-tune this rule's thresholds one at a
+  time.
+
+No production code (`src/swing-scanner.src.js`) has been changed by this phase or its retry. Which of
+(a) or (b) to pursue is a decision pending the user's review of these results, not one to make
+unilaterally here.
