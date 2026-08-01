@@ -225,10 +225,10 @@ sub-project 4), and that sub-project verified E반등 using its own separate can
 never touched B지지선 or B지지선's own share of the pooled candidate set.
 
 D박스 (sub-project 7c) still remains to be verified. Until it lands, no conclusion should be drawn
-about a full four-pattern decomposition of the pooled A+B+C+D result — this sub-project narrows the
-open question to "C촉매 and D박스" only in the sense that A눌림목 and C촉매 have now both been
-individually examined, not in the sense that either has been shown to be, or not be, the source of
-the pooled result's weakness.
+about a full four-pattern decomposition of the pooled A+B+C+D result. The patterns now individually
+examined are A눌림목 (7a) and C촉매 (this sub-project) — B지지선 and D박스 remain unmeasured in
+isolation. Having completed isolated verification does not, by itself, establish that either
+A눌림목 or C촉매 is or isn't responsible for the pooled result's weakness.
 
 ## 7. Limitations
 

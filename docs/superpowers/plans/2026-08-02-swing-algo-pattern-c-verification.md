@@ -28,9 +28,9 @@ under `backtest/` or `backtest/tests/`.
   `backtest_regime_lookup.json`.
 - Pattern filter: `pattern_type == "C촉매"` (exact string, verified against the actual cache this
   session — do not guess or re-derive from mangled terminal output; copy this literal string).
-  Expected count: **5,226** candidates, split `hold_days=2` (5,030, the pattern's production
-  default) / `hold_days=5` (196, grade `강매` override) — verify this exact count in Task 1
-  before proceeding to Task 2.
+  Expected count: **5,226** candidates, split `hold_days=5` (5,030, grade `강매` override) /
+  `hold_days=2` (196, the pattern's own default absent that override) — verify this exact count
+  in Task 1 before proceeding to Task 2.
 - Grid (216 cells, built directly — do NOT call `build_grid()`, which has an `exclude_d_box` axis
   that would just duplicate every cell since no D박스 candidates exist in this filtered pool):
   ```python
@@ -108,7 +108,7 @@ print('date range:', min(c['date'] for c in c_candidates), '..', max(c['date'] f
 "
 ```
 
-Expected: `C촉매 count: 5226`, `hold_days distribution: {2: 5030, 5: 196}` (order may vary), date
+Expected: `C촉매 count: 5226`, `hold_days distribution: {5: 5030, 2: 196}` (order may vary), date
 range spanning `2022-01-04`..`2025-12-30`. **If the count doesn't match 5,226, stop and
 investigate before proceeding.**
 
