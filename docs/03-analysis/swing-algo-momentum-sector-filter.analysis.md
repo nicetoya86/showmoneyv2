@@ -15,7 +15,8 @@
 > 1%-10%, that `hit_rate >= 90%` is unreachable profitably via target/stop tuning alone; landed on
 > two viable configurations — **Config A** (`target_pct=0.10, stop_pct=0.10, hold_days=10`:
 > reliable, +27.93%/+29.80% train/test `cagr_15slot`, but only ~44-45% hit_rate) and **Config B**
-> (`target_pct=0.03`, stop effectively removed: 80.51%/81.19% hit_rate, but unbounded single-name
+> (`target_pct=0.03, stop_pct=1.00` — stop effectively removed, matching the `config_b_3_100` key
+> in `backtest_momentum_regime_gate.json`: 80.51%/81.19% hit_rate, but unbounded single-name
 > downside risk from the de-facto absent stop) — this sub-project picks up from that fork)
 
 ---
@@ -93,7 +94,8 @@ stability, the same trade-off pattern E반등 hit repeatedly in sub-projects 3-4
 ### 3.2 Breakeven-ratchet exit at `hold_days=5`
 
 Source: `backtest_momentum_breakeven_hold5.json`. Moving the stop to breakeven once price rises
-1.5% past entry, on the original `hold_days=5` pool: train `n_trades=1,012`,
+1.5% past entry, on the same Config-A candidate pool, re-simulated with the exit window truncated
+to `hold_days=5`: train `n_trades=1,012`,
 `breakeven_rate=44.47%`, `trades_per_week=7.78`, `avg_pnl=0.15%`, `cagr_15slot=+3.14%`. Test:
 `n_trades=809`, `breakeven_rate=44.99%`, `trades_per_week=10.32`, `avg_pnl=0.52%`,
 `cagr_15slot=+19.38%`.
@@ -144,7 +146,10 @@ Source: `backtest_momentum_regime_gate.json`.
 - **Config A** (`target=stop=10%`): regime gate lifts hit_rate modestly (train 44.32%→48.19%, test
   45.32%→50.52%(1)) but train `trades_per_week` falls to **3.40** (442 trades over the train
   window), below the 5/week floor — the gate fails the frequency requirement on the train split
-  even though it clears the hit_rate direction and the test-side frequency (6.13/week).
+  even though it clears the hit_rate direction and the test-side frequency (6.13/week). Notably,
+  `cagr_15slot` actually falls on train (+27.93%→+22.18%) but *improves* on test (+29.80%→+40.76%)
+  — the only lever in this entire document where test-side cagr improves — yet the config is still
+  correctly rejected here because of the train-side frequency-floor failure, not because of cagr.
   ((1) exact JSON value: `hit_rate=0.5051975051975052` → 50.52%.)
 - **Config B** (`target=3%, stop` effectively removed): regime gate barely moves hit_rate (train
   80.51%→80.61%, test 81.19%→82.04%) while train `trades_per_week` falls to **3.01** — same
@@ -239,7 +244,7 @@ frequency floor).
 
 The `sector_strong` filter should be treated as an **optional, secondary variant**, not a
 replacement for the baseline default: its hit_rate gain is real but modest (+1.0pp train, +3.8pp
-test) and it costs roughly a third of Config A's trade count (1,038→781 train, 854→643 test) and
+test) and it costs roughly a quarter of Config A's trade count (1,038→781 train, 854→643 test) and
 about half of train-side `cagr_15slot` (+27.93%→+14.30%) for that gain. The test-side cagr holds up
 well (+29.80%→+27.09%), but per §5, the size of the train/test divergence itself is a stability
 flag under a single train/test split — not a result that should be trusted more than the unfiltered
