@@ -73,6 +73,12 @@ still a loss (-6.28%/yr, at `target_pct=10%, stop_pct=1%, min_score=110, regime_
 -28.90%/yr (`target_pct=3%, stop_pct=2%, min_score=90, regime_gate=False` — `n_trades=1352,
 hit_rate=25.07%`).
 
+*Footnote*: at `min_score=110`, `regime_gate` on vs. off produce bitwise-identical results across
+all 36 matching cell pairs in this grid (verified directly against
+`backtest_pattern_a_grid_results.json`). The selected config below has `regime_gate=False` at
+`min_score=110`, but that is an arbitrary tiebreak between two identical rows, not evidence that
+`regime_gate=False` outperforms `regime_gate=True`.
+
 A trader's honest read on this shape: the grid confirms the same trade-off seen everywhere else in
 this research line — cells with a tight target relative to stop buy a higher hit_rate but bleed
 `cagr` (wide loss on each stop-out outweighs frequent small wins), while cells with a wide target
@@ -99,7 +105,8 @@ descending) selected:
 Both splits clear `n_trades >= 50` by more than an order of magnitude (1,287 and 786), so this
 result is statistically reliable, not a small-sample artifact. Both splits also clear
 `trades_per_week >= 5` comfortably (9.89 and 10.02). Both splits fail `hit_rate >= 90%` badly
-(short by roughly 41-46 percentage points) and both splits fail `cagr_15slot > 0` (both negative).
+(short by roughly 36-41 percentage points — `90% - 49.34% = 40.66pp` train, `90% - 54.33% = 35.67pp`
+test) and both splits fail `cagr_15slot > 0` (both negative).
 
 Test actually looks directionally *better* than train on every metric here — higher hit_rate
 (54.33% vs 49.34%), less negative cagr (-12.61% vs -21.22%), and a much smaller drawdown (-19.34%
@@ -129,55 +136,86 @@ underpowered) used by every prior sub-project in this line:
 **Verdict: target-not-met, but reliably so.** A눌림목 in isolation, across an exhaustive 216-cell
 grid identical in structure to sub-project 2's pooled grid, cannot reach `hit_rate >= 90%`
 profitably by target/stop/min_score/regime-gate tuning alone. Zero cells clear the hit_rate bar;
-zero cells are even profitable on `cagr_15slot`. This is a decisive, well-powered negative result,
-not a small-sample fluke or a near-miss.
+zero cells are even profitable on `cagr_15slot` (train-side, per the 216-cell grid — the grid is
+only fully evaluated on train; test is evaluated once, for the selected config only, as in §2).
+This is a decisive, well-powered negative result, not a small-sample fluke or a near-miss.
 
 ## 5. Comparison to the Pooled Sub-project 2 Result
 
-Sub-project 2's pooled A+B+C+D grid (432 cells, same `run_one_config`/`select_best_config`
-machinery, same fallback selection rule): 0/432 cells cleared `hit_rate >= 90%`; grid extremes were
-`cagr_15slot` max **-9.62%/yr**, min -29.96%/yr; the fallback-selected config landed at
-`hit_rate=46.96%/45.89%` (train/test) with `cagr_15slot=-27.94%/-29.59%` (train/test).
+**Correction (post-review)**: an earlier version of this section compared A눌림목's 216-cell grid
+against three headline numbers quoted from sub-project 2's analysis doc without checking which
+`exclude_d_box` setting each one actually came from. Verified directly against
+`backtest_grid_search_results.json`'s 432 `train_results` cells: the grid's overall max `cagr_15slot`
+(-9.62%/yr) and the fallback-selected config (`hit_rate=46.96%/45.89%`, `cagr_15slot=-27.94%/-29.59%`)
+are **both `exclude_d_box=True` cells** — i.e. an **A+B+C** pool, not A+B+C+D. Only the grid's overall
+min `cagr_15slot` (-29.96%/yr) is genuinely `exclude_d_box=False` (true A+B+C+D). Comparing A눌림목's
+216-cell, `exclude_d_box=False`-only grid against two A+B+C numbers and one A+B+C+D number under a
+single "pooled A+B+C+D" label was not a like-for-like comparison. This section replaces that
+comparison with a genuine like-for-like subgrid.
+
+**Corrected pool**: the `exclude_d_box=False` subset of `backtest_grid_search_results.json`'s 432
+`train_results` cells — 216 cells, matching A눌림목's own grid size exactly (verified directly:
+`len([c for c in train_results if c['exclude_d_box'] is False]) == 216`). Within this subgrid, max
+`cagr_15slot` is **-10.49%/yr** (`target_pct=6%, stop_pct=1%, min_score=60, regime_gate=True`,
+`n_trades=1104, hit_rate=11.23%`), min is **-29.96%/yr** (same cell as the original full-grid min,
+since it was already `exclude_d_box=False`: `target_pct=3%, stop_pct=4%, min_score=90,
+regime_gate=True, n_trades=1406, hit_rate=45.95%`). Re-applying the same fallback selection rule
+(filter `trades_per_week >= 5`, sort by `hit_rate` descending then `cagr_15slot` descending) within
+just this subgrid selects `target_pct=3%, stop_pct=4%, min_score=60, regime_gate=False` with
+**train** `hit_rate=46.14%, cagr_15slot=-29.31%/yr` (`n_trades=1424`). Note: this in-subgrid
+selection has no corresponding **test**-side figure — `backtest_grid_search_results.json` only
+computed a single `test_result`, for the original (mixed-pool, `exclude_d_box=True`) overall
+selection, and reusing that number here would reintroduce the same mislabeling this correction is
+fixing. The corrected pooled row below is therefore train-only.
 
 Comparing like-for-like against A눌림목 alone:
 
-| Comparison | Pooled (432 cells, A+B+C+D) | A눌림목 alone (216 cells) |
+| Comparison | Pooled A+B+C+D, `exclude_d_box=False` subgrid (216 cells, train) | A눌림목 alone (216 cells) |
 |---|---:|---:|
-| Cells clearing `hit_rate >= 90%` | 0 / 432 | 0 / 216 |
-| Grid max `cagr_15slot` (best cell, any hit_rate) | -9.62%/yr | -6.28%/yr |
-| Grid min `cagr_15slot` (worst cell) | -29.96%/yr | -28.90%/yr |
-| Fallback-selected config `hit_rate` (train / test) | 46.96% / 45.89% | 49.34% / 54.33% |
-| Fallback-selected config `cagr_15slot` (train / test) | -27.94% / -29.59% | -21.22% / -12.61% |
+| Cells clearing `hit_rate >= 90%` | 0 / 216 | 0 / 216 (train) |
+| Grid max `cagr_15slot` (best cell, any hit_rate) | -10.49%/yr | -6.28%/yr (train) |
+| Grid min `cagr_15slot` (worst cell) | -29.96%/yr | -28.90%/yr (train) |
+| Fallback-selected config `hit_rate` | 46.14% (train) | 49.34% / 54.33% (train / test) |
+| Fallback-selected config `cagr_15slot` | -29.31%/yr (train) | -21.22% / -12.61% (train / test) |
 
-On every one of these like-for-like pairs, A눌림목 in isolation is the same or mildly *better* than
-the pooled result — not worse: its grid-best cagr cell (-6.28%) beats the pooled grid-best cell
-(-9.62%), its grid-worst cell (-28.90%) is marginally less bad than the pooled grid-worst
-(-29.96%), its selected-config hit_rate beats the pooled selected-config hit_rate on both splits,
-and its selected-config cagr beats the pooled selected-config cagr on both splits (by roughly
-6.7pp train and a much larger 17pp test).
+On every one of these like-for-like (train-side) pairs, A눌림목 in isolation is the same or mildly
+*better* than the true A+B+C+D pooled subgrid — not worse: its grid-best cagr cell (-6.28%) beats
+the pooled subgrid's grid-best cell (-10.49%), its grid-worst cell (-28.90%) is marginally less bad
+than the pooled subgrid's grid-worst (-29.96%), and its selected-config train hit_rate (49.34%)
+and cagr (-21.22%) both beat the pooled subgrid's selected-config train figures (46.14% and
+-29.31% respectively, a gap of roughly 8.1pp cagr). A눌림목's test-side numbers (54.33%
+hit_rate, -12.61% cagr) look better still, but there is no true-pool test-side figure to compare
+them against — see the note above.
 
 It is worth being explicit about a comparison that looks worse on its face but is not a fair one:
-A눌림목's *selected* configuration's cagr (-21.22% train) is more negative than the pooled grid's
-single best cell anywhere in that grid (-9.62%). But that pooled -9.62% cell was never a candidate
-for deployment either — it was the grid's best-*cagr* cell, not its selected config, and (per the
-design doc's own convention) a config chosen purely for best cagr at any hit_rate typically carries
-a very low hit_rate (A눌림목's own best-cagr cell, at -6.28%, has `hit_rate=8.17%` — essentially
-unusable as a signal). Comparing a *selected* config (chosen to prioritize hit_rate first, per the
-same fallback rule used everywhere in this line) against an *unselected* best-cagr outlier cell
-from a different grid is not an apples-to-apples read, and doing so would produce a misleadingly
-pessimistic conclusion about A눌림목 specifically.
+A눌림목's *selected* configuration's cagr (-21.22% train) is more negative than the (mixed-pool)
+grid's single best cell anywhere in the original 432-cell grid (-9.62%, an `exclude_d_box=True`
+cell — see the correction note above). But that -9.62% cell was never a candidate for deployment
+either — it was the grid's best-*cagr* cell, not its selected config, and (per the design doc's own
+convention) a config chosen purely for best cagr at any hit_rate typically carries a very low
+hit_rate: that pooled grid's own best-cagr cell has `hit_rate=7.40%`
+(`docs/03-analysis/swing-algo-target-stop-retuning.analysis.md`, line 85/98), and A눌림목's own
+best-cagr cell (-6.28%) is much the same — `hit_rate=8.17%`, essentially unusable as a signal
+either way. Comparing a *selected* config (chosen to prioritize hit_rate first, per the same
+fallback rule used everywhere in this line) against an *unselected* best-cagr outlier cell is not
+an apples-to-apples read regardless of which grid it comes from.
 
-**Honest trader-perspective read**: A눌림목 does not appear to be the pattern dragging the pooled
-A+B+C+D result down. If anything, on every metric that can be compared consistently between the
-two grids, A눌림목 alone is a touch stronger than the pool average — a materially better test-side
-cagr (-12.61% vs -29.59%, a difference of nearly 17 percentage points) is the most striking single
-data point. That implies one or more of the other three patterns (most plausibly whichever pattern
-sub-project 2's pool weighted most heavily behind A눌림목, since A눌림목 alone is already 45% of the
-pool) is dragging the blended number down harder than A눌림목 does on its own. But this is a
-"less bad than an already-bad average" finding, not a "found an edge" finding — A눌림목 alone is
-still comprehensively unprofitable (0/216 cells profitable, let alone at 90% hit_rate), and a
-trader should not read "better than the pool" as "good." The pool being bad and A눌림목 being
-slightly-less-bad-than-the-pool are both true at once.
+**Honest trader-perspective read**: on the corrected, genuinely like-for-like `exclude_d_box=False`
+comparison, A눌림목 does not appear to be the pattern dragging the true A+B+C+D pooled result down —
+its train-side numbers are mildly better than the pooled subgrid's on every axis compared above.
+But **which** of the other patterns (if any) is responsible for that gap cannot be determined from
+this sub-project alone — see §7 for why the earlier "C촉매 or D박스" framing has been withdrawn.
+This is a "less bad than an already-bad pooled average" finding, not a "found an edge" finding —
+A눌림목 alone is still comprehensively unprofitable (0/216 cells profitable, let alone at 90%
+hit_rate), and a trader should not read "better than the pool" as "good." The pool being bad and
+A눌림목 being slightly-less-bad-than-the-pool are both true at once.
+
+Separately, and in a different context from the grid comparison above: A눌림목's raw candidate
+count is 9,808 of the full 21,587-candidate A+B+C+D pool (per §1 and the design doc), i.e. **45.4%**
+of all candidates by count. That 45.4% figure describes candidate-pool *share*, not grid cells, and
+should not be conflated with the 216-cell subgrid comparison immediately above — the two are
+different units (raw candidates vs. grid configurations) over different bases (21,587 full pool vs.
+216-cell subgrid).
 
 ## 6. Limitations
 
@@ -191,10 +229,11 @@ slightly-less-bad-than-the-pool are both true at once.
   pattern-C-specific blocks not modeled, flat round-trip fee assumption) since `run_one_config` and
   its dependencies are reused unmodified.
 - **C촉매 and D박스 are explicitly out of scope** — each gets its own sub-project (7b, 7c) after
-  this one, per the user's decision to split rather than combine. The pooled-vs-isolated comparison
-  in Section 5 is necessarily incomplete until those two verifications land: it is not yet possible
-  to say which specific pattern(s) are dragging the pooled average down, only that A눌림목 does not
-  appear to be the primary culprit.
+  this one, per the user's decision to split rather than combine (B지지선 was already verified
+  separately in sub-project 4, so it is not an open question). The pooled-vs-isolated comparison in
+  §5 is necessarily incomplete until 7b/7c land: it is not yet possible to say which of C촉매 or
+  D박스 (if either) drags the true A+B+C+D pooled average down relative to its own weight in the
+  pool, only that A눌림목 does not appear to be the primary culprit.
 
 ## 7. Final Recommendation
 
@@ -210,12 +249,18 @@ configuration is a reliable-but-losing -21.22%/-12.61% (train/test) `cagr_15slot
 here that argues for retuning A눌림목's target/stop/min_score/regime-gate parameters in production.
 
 What this sub-project *does* establish, and the reason it was worth running: A눌림목 in isolation is
-not meaningfully worse than sub-project 2's pooled A+B+C+D result, and by most like-for-like
-measures is mildly better (see Section 5). The pooled result's poor economics are not attributable
-to A눌림목 specifically. The open question this sub-project cannot answer is whether C촉매 or
-D박스 — still unverified — are pulling the pooled average down harder than their pooled weight
-alone would suggest. That question is explicitly deferred to sub-projects 7b (C촉매) and 7c (D박스),
-which should be read before drawing any conclusion about the pooled system as a whole.
+not meaningfully worse than the true, corrected A+B+C+D pooled subgrid comparison in §5 (the
+`exclude_d_box=False` 216-cell subgrid — D박스 is *not* excluded from this comparison), and by most
+like-for-like train-side measures is mildly better. **This sub-project does not, however, establish
+that C촉매 or D박스 specifically are the patterns pulling the pooled average down** — an earlier
+version of this section drew that inference from a mixed-pool (`exclude_d_box=True`) comparison
+that has since been corrected (see §5's correction note), and a true A+B+C+D comparison does not
+support singling out any specific pattern as the culprit. B지지선 is not an open question here — it
+was already verified separately in sub-project 4. What remains genuinely open is each of C촉매's
+and D박스's *individual* contribution to the pooled average, which this sub-project cannot
+determine and does not attempt to. That question is explicitly deferred to sub-projects 7b (C촉매)
+and 7c (D박스), which should be read before drawing any conclusion about the pooled system as a
+whole.
 
 ---
 
