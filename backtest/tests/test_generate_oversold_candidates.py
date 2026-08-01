@@ -26,6 +26,23 @@ def _build_df(flat_n, flat_level, rally_days, rally_step, decline_days, decline_
     return df, len(close) - 1
 
 
+def _build_df_confirm(flat_n, flat_level, rally_days, rally_step, decline_days, decline_step,
+                       bounce_close, confirm_close):
+    """Extends _build_df's fixture with one more day (the 2-day-confirmation day) appended
+    after the bounce day. idx (returned) still points at the bounce day, unchanged."""
+    df, idx = _build_df(flat_n, flat_level, rally_days, rally_step, decline_days, decline_step,
+                         bounce_close)
+    new_row = pd.DataFrame({
+        "open": [float(df["close"].iloc[-1])],
+        "high": [confirm_close * 1.01],
+        "low": [confirm_close * 0.99],
+        "close": [confirm_close],
+        "volume": [2_000_000_000.0],
+    })
+    df = pd.concat([df, new_row], ignore_index=True)
+    return df, idx
+
+
 def test_is_oversold_bounce_all_conditions_true():
     df, idx = _build_df(48, 950, 16, 15, 18, 13, 1067.2639)
     assert mod._is_oversold_bounce(df, idx) is True
@@ -73,6 +90,25 @@ def test_is_oversold_bounce_true_when_above_prior_close_but_below_prior_high():
     assert mod._is_oversold_bounce(df, idx) is True
 
 
+def test_confirms_next_day_true_when_rsi_still_above_40():
+    # bounce day's RSI (idx) is 54.56; confirm day holds flat -> RSI at idx+1 stays 54.73 (>=40)
+    df, idx = _build_df_confirm(48, 950, 16, 15, 18, 13, 1067.2639, confirm_close=1067.2639)
+    assert mod._confirms_next_day(df, idx) is True
+
+
+def test_confirms_next_day_false_when_rsi_drops_back_below_40():
+    # confirm day drops sharply -> RSI at idx+1 falls to 38.54 (<40), a whipsaw the 2-day
+    # confirmation is designed to catch
+    df, idx = _build_df_confirm(48, 950, 16, 15, 18, 13, 1067.2639, confirm_close=960.0)
+    assert mod._confirms_next_day(df, idx) is False
+
+
+def test_confirms_next_day_false_when_no_next_day_data():
+    # idx is the last row of the DataFrame -- there is no idx+1 to check
+    df, idx = _build_df(48, 950, 16, 15, 18, 13, 1067.2639)
+    assert mod._confirms_next_day(df, idx) is False
+
+
 def test_scan_oversold_candidates_caches_window_and_fields(monkeypatch):
     ticker = "000001.KS"
     df = pd.DataFrame({
@@ -93,7 +129,10 @@ def test_scan_oversold_candidates_caches_window_and_fields(monkeypatch):
     monkeypatch.setattr(mod, "fetch_supply_for_date", lambda trd_dd: {})
     monkeypatch.setattr(mod, "fetch_disclosures_for_date", lambda trd_dd, api_key: {})
     monkeypatch.setattr(mod, "_passes_base_filters", lambda df, idx, *, supply, dart_items: True)
+    # provisional bounce fires at idx=1; confirmation also fires at idx=1 -> trigger_idx=2,
+    # entry_idx=3
     monkeypatch.setattr(mod, "_is_oversold_bounce", lambda df, idx: idx == 1)
+    monkeypatch.setattr(mod, "_confirms_next_day", lambda df, idx: idx == 1)
 
     candidates, skipped = mod.scan_oversold_candidates([ticker], start="2024-01-01", end="2024-01-12")
 
@@ -102,18 +141,18 @@ def test_scan_oversold_candidates_caches_window_and_fields(monkeypatch):
     c = candidates[0]
     assert c.ticker == ticker
     assert c.code == "000001"
-    assert c.date == "2024-01-03T00:00:00+00:00"
-    assert c.entry == 100.0
+    assert c.date == "2024-01-04T00:00:00+00:00"  # trigger_idx=2, one day later than Phase B
+    assert c.entry == 101.5  # close[2]
     assert c.pattern_type == "E반등"
     assert c.score == 110
     assert c.rank_score == 110
     assert c.grade == "매수"
     assert c.hold_days == 5
-    # entry_idx = idx(1) + 1 = 2; window is df.iloc[2:7] (HOLD_DAYS=5 rows, all exist)
-    assert c.window_open == [101.0, 102.0, 103.0, 104.0, 105.0]
-    assert c.window_high == [102.0, 103.0, 104.0, 105.0, 106.0]
-    assert c.window_low == [100.0, 101.0, 102.0, 103.0, 104.0]
-    assert c.window_close == [101.5, 102.5, 103.5, 104.5, 105.5]
+    # entry_idx = trigger_idx(2) + 1 = 3; window is df.iloc[3:8] (HOLD_DAYS=5 rows, all exist)
+    assert c.window_open == [102.0, 103.0, 104.0, 105.0, 106.0]
+    assert c.window_high == [103.0, 104.0, 105.0, 106.0, 107.0]
+    assert c.window_low == [101.0, 102.0, 103.0, 104.0, 105.0]
+    assert c.window_close == [102.5, 103.5, 104.5, 105.5, 106.5]
 
 
 def test_scan_oversold_candidates_skips_fetch_failure(monkeypatch):

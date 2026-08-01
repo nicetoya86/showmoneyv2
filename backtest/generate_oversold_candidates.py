@@ -65,6 +65,20 @@ def _is_oversold_bounce(df: pd.DataFrame, idx: int) -> bool:
     return True
 
 
+def _confirms_next_day(df: pd.DataFrame, idx: int) -> bool:
+    """Item 3 (2-day confirmation): the RSI cross-up _is_oversold_bounce confirmed at idx
+    must still hold (rsi14 >= 40) one bar later, at idx+1 -- guards against a single-day
+    whipsaw back below 40 that a bare same-day cross-up cannot distinguish from a real
+    reversal."""
+    close = df["close"].to_numpy(dtype="float64")
+    if idx + 1 >= len(close):
+        return False
+    rsi_next = calc_rsi14(close, idx + 1)
+    if not np.isfinite(rsi_next):
+        return False
+    return rsi_next >= 40
+
+
 def _passes_base_filters(
     df: pd.DataFrame, idx: int, *, supply: Dict[str, float], dart_items: List[str]
 ) -> bool:
@@ -122,8 +136,7 @@ def scan_oversold_candidates(
             if not idxs:
                 continue
             idx = int(idxs[0])
-            entry_idx = idx + 1
-            if entry_idx >= len(df):
+            if idx + 2 >= len(df):
                 continue
             code = _code_of(t)
             if not _passes_base_filters(
@@ -132,10 +145,14 @@ def scan_oversold_candidates(
                 continue
             if not _is_oversold_bounce(df, idx):
                 continue
+            if not _confirms_next_day(df, idx):
+                continue
+            trigger_idx = idx + 1
+            entry_idx = trigger_idx + 1
             window = df.iloc[entry_idx: entry_idx + HOLD_DAYS]
             candidates.append(CachedCandidate(
-                ticker=t, code=code, date=day.isoformat(),
-                entry=float(df["close"].to_numpy(dtype="float64")[idx]),
+                ticker=t, code=code, date=df["timestamp_utc"].iloc[trigger_idx].isoformat(),
+                entry=float(df["close"].to_numpy(dtype="float64")[trigger_idx]),
                 pattern_type="E반등", score=110, rank_score=110, grade="매수", hold_days=HOLD_DAYS,
                 window_open=window["open"].astype(float).tolist(),
                 window_high=window["high"].astype(float).tolist(),
