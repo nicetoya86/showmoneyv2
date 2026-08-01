@@ -258,6 +258,73 @@ this entire research line for consistency and formally close momentum-continuati
 target-not-met, pivoting to low-volatility-accumulation. This choice is a human decision about what
 this research line is actually optimizing for, not one this analysis can make unilaterally.
 
+## 9. Directly Targeting 90% Hit Rate (Executed)
+
+Following an explicit user request to find an execution strategy that meets the 90% hit_rate goal
+specifically, a second follow-up grid was run: since a smaller target relative to the stop should
+mechanically be touched more often within the fixed 10-day hold window, `target_pct` was swept much
+smaller than Section 8's range — `{0.005, 0.01, 0.015, 0.02, 0.025, 0.03}` (0.5%-3%) — against
+`stop_pct ∈ {0.02, 0.03, 0.04, 0.06, 0.08, 0.10}`, same `min_score`/`regime_gate`/`exclude_d_box`
+sweep as every prior grid, 432 cells total (`backtest_momentum_smalltarget_results.json`), same
+one-off-script approach as Section 8 (`target_stop_grid_search.py` untouched).
+
+**Result: hit_rate rose close to the 90% bar, but never reached it, and every cell's `cagr_15slot`
+went negative — with zero exceptions.**
+
+- **0 of 432 cells** reach `hit_rate >= 90%`. The single highest is **87.48%**
+  (`target_pct=0.005, stop_pct=0.10`), `n_trades=663` (train, reliable), `trades_per_week=5.09`
+  (clears the floor, barely) — but `avg_pnl=-0.98%` and `cagr_15slot=-18.40%`. Test split for this
+  same (selected) config: `n_trades=544`, `hit_rate=88.79%`, `trades_per_week=6.94`,
+  `cagr_15slot=-18.40%` (train and test track each other closely here).
+- **0 of 432 cells have positive `cagr_15slot`** — not a near-miss, a clean sweep. Every cell in
+  this smaller-target grid loses money, and the higher `hit_rate` climbs, the worse `cagr_15slot`
+  generally gets (e.g. `target_pct=0.01` reaches `hit_rate=86.14%` at `cagr_15slot=-15.26%`;
+  `target_pct=0.005` reaches `hit_rate=87.48%` at `cagr_15slot=-18.40%` — hit_rate keeps climbing as
+  target shrinks, but returns keep getting worse, not better).
+
+**Why this happens (not a bug, a payoff-asymmetry mechanism):** shrinking `target_pct` makes the
+target easy to touch (hence higher `hit_rate`), but each win is now tiny (0.5%-3%, largely consumed
+by the fixed 0.2% round-trip cost), while the `stop_pct` losses that still occasionally occur stay
+large (2%-10%). At `target_pct=0.005, stop_pct=0.10`: 87.5% of trades win a net ~0.3%, but the
+remaining 12.5% lose ~10.2% — expected value per trade ≈ `0.875×0.3% + 0.125×(-10.2%) ≈ -1.0%`,
+matching the observed deeply negative `cagr_15slot`. This is the textbook "high win rate, poor
+risk/reward" trap: hit_rate and expectancy are moving in opposite directions here, not the same
+one, and no amount of further target-shrinking closes the gap — it makes both problems worse
+simultaneously (hit_rate approaches but never reaches 90%, while losses on the rare stop-outs
+dominate the expectancy even more).
+
+**Combined with Section 8's finding** (widening target/stop instead pushes `cagr_15slot` solidly
+positive at target=stop=10%, but `hit_rate` tops out at 48%): across the full explored space
+(`target_pct` from 0.5% to 30%, `stop_pct` from 1% to 10%, 672 total cells examined across both
+follow-ups plus the original 432), **`hit_rate` and `cagr_15slot` are monotonically opposed** for
+this entry signal under a fixed-percentage target/stop exit — pushing either metric toward its
+goal (90% hit_rate, or higher CAGR) moves the other one further away. No cell anywhere in this
+space achieves both `hit_rate >= 90%` and `cagr_15slot > 0`.
+
+**Conclusion: a 90%-hit_rate execution strategy is not achievable for this entry signal via
+fixed-percentage target/stop tuning, profitably or otherwise.** Reaching 90% hit_rate specifically
+would require abandoning the fixed-%-target/stop exit mechanism entirely — e.g. a trailing stop,
+partial profit-taking, a volatility-adjusted (not flat-percentage) target, or a materially longer
+hold window than this pool's fixed 10 days (which would require a new candidate scan, since
+`hold_days` is baked into each cached candidate's window at scan time) — and even then, matching a
+90% hit_rate to positive economics is not guaranteed; it runs against the general market-microstructure
+reality that momentum/trend-following signals structurally trade a lower win rate for a larger
+average win (the opposite shape from a high-hit-rate strategy), which is also why sub-project 3-4's
+E반등 (an explicitly high-hit-rate-oriented hypothesis) could never generate enough trade frequency
+to test at scale, while this hypothesis generates ample frequency but the wrong win-rate shape for
+a 90% bar.
+
+This sharpens rather than resolves the Section 8 decision point: it is not simply a matter of
+picking a criterion to evaluate the *existing* 10%/10% configuration by — reaching literal 90%
+`hit_rate` with this entry signal and exit family has now been demonstrated empirically
+unreachable without profitability collapsing. The two live options from Section 8 stand as before,
+now on firmer empirical footing: (a) evaluate momentum-continuation on a return-focused criterion
+instead of the 90%-hit_rate bar (the 10%/10% configuration already clears that: reliable,
++27.93%/+29.80% cagr on both splits), since a 90%-hit_rate-compatible execution strategy for this
+signal does not exist within the tested exit-mechanism family; or (b) keep the 90% bar
+non-negotiable for consistency across this research line, formally close momentum-continuation as
+target-not-met, and pivot to low-volatility-accumulation.
+
 ---
 
 No production code (`src/swing-scanner.src.js`) has been changed by this sub-project — as with
