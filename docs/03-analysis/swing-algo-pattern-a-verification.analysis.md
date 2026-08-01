@@ -16,7 +16,10 @@
 > across the entire grid was -9.62%/yr, and the fallback-selected config landed at
 > `hit_rate=46.96%/45.89%` train/test with `cagr_15slot=-27.94%/-29.59%` — but never broke that
 > result out per individual pattern, leaving open whether the pooled number was hiding a decent
-> pattern averaged down by bad ones)
+> pattern averaged down by bad ones; two of these three figures — the -9.62%/yr grid max and the
+> `hit_rate=46.96%/45.89%`/`cagr_15slot=-27.94%/-29.59%` selected config — are from
+> `exclude_d_box=True` cells, not the true A+B+C+D pool; see §5 for the corrected like-for-like
+> comparison and its caveats)
 
 ---
 
@@ -151,7 +154,8 @@ are **both `exclude_d_box=True` cells** — i.e. an **A+B+C** pool, not A+B+C+D.
 min `cagr_15slot` (-29.96%/yr) is genuinely `exclude_d_box=False` (true A+B+C+D). Comparing A눌림목's
 216-cell, `exclude_d_box=False`-only grid against two A+B+C numbers and one A+B+C+D number under a
 single "pooled A+B+C+D" label was not a like-for-like comparison. This section replaces that
-comparison with a genuine like-for-like subgrid.
+comparison with a corrected `exclude_d_box=False` subgrid — though, as the caveat below explains,
+even this corrected comparison is not a full like-for-like decomposition.
 
 **Corrected pool**: the `exclude_d_box=False` subset of `backtest_grid_search_results.json`'s 432
 `train_results` cells — 216 cells, matching A눌림목's own grid size exactly (verified directly:
@@ -168,7 +172,21 @@ computed a single `test_result`, for the original (mixed-pool, `exclude_d_box=Tr
 selection, and reusing that number here would reintroduce the same mislabeling this correction is
 fixing. The corrected pooled row below is therefore train-only.
 
-Comparing like-for-like against A눌림목 alone:
+**Important caveat on what this comparison does and does not control for**: `run_one_config`
+calls `apply_daily_selection` (in `backtest/run_swing_v2_backtest.py`), which caps trades at
+`max_per_day=3` / `max_per_week=15`, selecting among same-day candidates by `(grade, rank_score)`
+descending. That means candidates compete for a scarce number of daily/weekly slots. When A눌림목
+is run alone, its candidates no longer compete against B/C/D candidates for those slots, so a
+materially different, larger *set* of A눌림목 signals gets selected than when A눌림목 runs pooled
+with B/C/D — A눌림목 running alone includes many lower-ranked signals that would be crowded out of
+daily slots when competing against B/C/D candidates in the pooled system. So "A눌림목 alone" is
+**not** a decomposition of A눌림목's contribution to the pooled result; it is a different portfolio
+entirely. The comparison below is like-for-like only in the narrow sense of grid shape and
+`exclude_d_box` labeling (both are true 216-cell, `exclude_d_box=False`-consistent grids) — it does
+not control for daily/weekly slot competition, and the two runs' selected trades are not the same
+trades restricted to a subset.
+
+Comparing these two runs (same grid shape, not a slot-competition-controlled decomposition):
 
 | Comparison | Pooled A+B+C+D, `exclude_d_box=False` subgrid (216 cells, train) | A눌림목 alone (216 cells) |
 |---|---:|---:|
@@ -178,8 +196,10 @@ Comparing like-for-like against A눌림목 alone:
 | Fallback-selected config `hit_rate` | 46.14% (train) | 49.34% / 54.33% (train / test) |
 | Fallback-selected config `cagr_15slot` | -29.31%/yr (train) | -21.22% / -12.61% (train / test) |
 
-On every one of these like-for-like (train-side) pairs, A눌림목 in isolation is the same or mildly
-*better* than the true A+B+C+D pooled subgrid — not worse: its grid-best cagr cell (-6.28%) beats
+On every one of these train-side pairs, A눌림목 in isolation is the same or mildly *better* than
+the true A+B+C+D pooled subgrid — not worse (bearing in mind, per the caveat above, that this is a
+comparison of two differently-selected portfolios, not a decomposition of one into the other): its
+grid-best cagr cell (-6.28%) beats
 the pooled subgrid's grid-best cell (-10.49%), its grid-worst cell (-28.90%) is marginally less bad
 than the pooled subgrid's grid-worst (-29.96%), and its selected-config train hit_rate (49.34%)
 and cagr (-21.22%) both beat the pooled subgrid's selected-config train figures (46.14% and
@@ -200,11 +220,13 @@ either way. Comparing a *selected* config (chosen to prioritize hit_rate first, 
 fallback rule used everywhere in this line) against an *unselected* best-cagr outlier cell is not
 an apples-to-apples read regardless of which grid it comes from.
 
-**Honest trader-perspective read**: on the corrected, genuinely like-for-like `exclude_d_box=False`
-comparison, A눌림목 does not appear to be the pattern dragging the true A+B+C+D pooled result down —
-its train-side numbers are mildly better than the pooled subgrid's on every axis compared above.
-But **which** of the other patterns (if any) is responsible for that gap cannot be determined from
-this sub-project alone — see §7 for why the earlier "C촉매 or D박스" framing has been withdrawn.
+**Honest trader-perspective read**: on the corrected `exclude_d_box=False` comparison, A눌림목 run
+alone does not look obviously worse than the true A+B+C+D pooled subgrid — its train-side numbers
+are mildly better than the pooled subgrid's on every axis compared above. But this is not a
+rigorous like-for-like decomposition of A눌림목's share of the pooled result (see the slot-competition
+caveat above), so **which** of the other patterns (if any) is responsible for the pooled result's
+weakness cannot be determined from this sub-project alone — see §7 for why the earlier "C촉매 or
+D박스" framing has been withdrawn.
 This is a "less bad than an already-bad pooled average" finding, not a "found an edge" finding —
 A눌림목 alone is still comprehensively unprofitable (0/216 cells profitable, let alone at 90%
 hit_rate), and a trader should not read "better than the pool" as "good." The pool being bad and
@@ -228,12 +250,21 @@ different units (raw candidates vs. grid configurations) over different bases (2
 - This sub-project inherits sub-project 1's simulation-machinery limitations (orderbook ask/bid and
   pattern-C-specific blocks not modeled, flat round-trip fee assumption) since `run_one_config` and
   its dependencies are reused unmodified.
+- **The §5 pooled-vs-A comparison does not control for daily/weekly slot competition.**
+  `run_one_config` calls `apply_daily_selection`, which caps trades at `max_per_day=3` /
+  `max_per_week=15` and selects by `(grade, rank_score)` descending, so A눌림목-alone and
+  A눌림목-within-the-pool select substantially different, not directly decomposed, trade sets — see
+  §5's caveat for detail.
 - **C촉매 and D박스 are explicitly out of scope** — each gets its own sub-project (7b, 7c) after
-  this one, per the user's decision to split rather than combine (B지지선 was already verified
-  separately in sub-project 4, so it is not an open question). The pooled-vs-isolated comparison in
-  §5 is necessarily incomplete until 7b/7c land: it is not yet possible to say which of C촉매 or
-  D박스 (if either) drags the true A+B+C+D pooled average down relative to its own weight in the
-  pool, only that A눌림목 does not appear to be the primary culprit.
+  this one, per the user's decision to split rather than combine. **B지지선 is also out of scope
+  here and remains unmeasured**: it was superseded in this research line by a purpose-built
+  replacement pattern (E반등/oversold-bounce, sub-project 4), and that sub-project verified E반등
+  using its own separate candidate generator — it never touched B지지선 or B지지선's own share of the
+  pooled candidate set. The pooled-vs-isolated comparison in §5 is necessarily incomplete until
+  7b/7c land (and B지지선's contribution is never directly measured by this research line's current
+  scope): it is not yet possible to say which of B지지선, C촉매, or D박스 (if any) drags the true
+  A+B+C+D pooled average down relative to its own weight in the pool, only that A눌림목 does not
+  appear to be the primary culprit.
 
 ## 7. Final Recommendation
 
@@ -248,22 +279,30 @@ same axes used everywhere else in this research line, and it reproduces the now-
 configuration is a reliable-but-losing -21.22%/-12.61% (train/test) `cagr_15slot`. There is nothing
 here that argues for retuning A눌림목's target/stop/min_score/regime-gate parameters in production.
 
-What this sub-project *does* establish, and the reason it was worth running: A눌림목 in isolation is
-not meaningfully worse than the true, corrected A+B+C+D pooled subgrid comparison in §5 (the
+What this sub-project *does* establish, and the reason it was worth running: A눌림목 in isolation
+does not look obviously worse than the true, corrected A+B+C+D pooled subgrid comparison in §5 (the
 `exclude_d_box=False` 216-cell subgrid — D박스 is *not* excluded from this comparison), and by most
-like-for-like train-side measures is mildly better. **This sub-project does not, however, establish
-that C촉매 or D박스 specifically are the patterns pulling the pooled average down** — an earlier
-version of this section drew that inference from a mixed-pool (`exclude_d_box=True`) comparison
-that has since been corrected (see §5's correction note), and a true A+B+C+D comparison does not
-support singling out any specific pattern as the culprit. B지지선 is not an open question here — it
-was already verified separately in sub-project 4. What remains genuinely open is each of C촉매's
-and D박스's *individual* contribution to the pooled average, which this sub-project cannot
-determine and does not attempt to. That question is explicitly deferred to sub-projects 7b (C촉매)
-and 7c (D박스), which should be read before drawing any conclusion about the pooled system as a
-whole.
+train-side measures is mildly better. This is a directional finding, not a rigorous like-for-like
+decomposition — as §5's caveat explains, `apply_daily_selection`'s daily/weekly slot competition
+means A눌림목-alone and A눌림목-within-the-pool select substantially different trade sets, so this
+comparison cannot cleanly attribute a share of the pooled result to A눌림목. **This sub-project does
+not establish that C촉매 or D박스 specifically are the patterns pulling the pooled average down** —
+an earlier version of this section drew that inference from a mixed-pool (`exclude_d_box=True`)
+comparison that has since been corrected (see §5's correction note), and neither the corrected
+comparison nor the slot-competition caveat supports singling out any specific pattern as the
+culprit. **B지지선 is also an open question, not a settled one** — it was superseded in this research
+line by a purpose-built replacement pattern (E반등/oversold-bounce, sub-project 4), and that
+sub-project verified E반등 using its own separate candidate generator, not B지지선's own share of the
+pooled candidate set, which remains unmeasured. What remains genuinely open is each of B지지선's,
+C촉매's, and D박스's *individual* contribution to the pooled average, which this sub-project cannot
+determine and does not attempt to. C촉매 and D박스 are explicitly deferred to sub-projects 7b (C촉매)
+and 7c (D박스); B지지선's own contribution is not currently scheduled to be measured by any planned
+sub-project, so 7b/7c should not be read as completing a full four-pattern decomposition of the
+pooled result.
 
 ---
 
 No production code (`src/swing-scanner.src.js`) has been changed by this sub-project. C촉매
-(sub-project 7b) and D박스 (sub-project 7c) remain to be verified separately before any conclusion
-is drawn about the full four-pattern production system.
+(sub-project 7b) and D박스 (sub-project 7c) remain to be verified separately, and B지지선's own share
+of the pooled candidate set remains unmeasured by any currently planned sub-project — no conclusion
+should be drawn about the full four-pattern production system until that gap is addressed.
