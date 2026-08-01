@@ -189,6 +189,75 @@ produce a cell with positive `cagr_15slot` and a plausible path to `hit_rate >= 
 hypothesis be closed and the research line pivot to low-volatility-accumulation, the other
 deferred hypothesis named in the original Phase B design doc.
 
+## 8. Widened Target/Stop Grid Follow-up (Executed)
+
+Per Section 7's recommendation, the 432-cell grid was re-run against the same 4,197-candidate pool
+with both `target_pct` and `stop_pct` widened past their original maxima, using
+`target_stop_grid_search.py`'s existing `run_one_config`/`select_best_config` functions directly
+(no modification to that file, and no new module — both functions already take `target_pct`/
+`stop_pct` as plain arguments and operate on generic result dicts, so a one-off script was
+sufficient, matching the precedent set by Phase A's tag-subset sweep):
+
+- `target_pct ∈ {0.10, 0.15, 0.20, 0.25, 0.30}` (previously capped at 0.10)
+- `stop_pct ∈ {0.04, 0.06, 0.08, 0.10}` (previously capped at 0.04)
+- `min_score`/`regime_gate`/`exclude_d_box` unchanged (`{60, 90, 110}` × `{False, True}` ×
+  `{False, True}`), for methodological consistency with every prior grid in this line
+
+240 cells total (`backtest_momentum_widegrid_results.json`).
+
+**Result: `selection.status = "target_not_met"` still — but the underlying economics flipped from
+clearly negative to clearly positive and reliable.**
+
+| Split | n_trades | Reliable (n≥50)? | hit_rate | trades_per_week | cagr_15slot |
+|-------|---------:|:-----------------:|---------:|-----------------:|-------------:|
+| Train (2022-01-01..2024-06-30) | 1,038 | **Yes** | 44.32% | 7.98 | **+27.93%** |
+| Test (2024-07-01..2026-01-01)  | 854   | **Yes** | 45.32% | 10.89 | **+29.80%** |
+
+Selected config: `target_pct=0.10, stop_pct=0.10` (a **symmetric 1:1** risk/reward, not the
+inverted 3%/4% shape from Section 3) `, min_score=60, regime_gate=false, exclude_d_box=false`.
+
+Three things stand out:
+
+1. **234 of 240 cells now have positive train `cagr_15slot`**, versus 6 of 432 in the original grid
+   — confirming Section 7's diagnosis that the original grid's ceiling, not the entry signal, was
+   suppressing returns. The single best-`cagr_15slot` cell in this wider grid (`target_pct=0.20,
+   stop_pct=0.10`, otherwise identical) reaches `n_trades=1,054`, `hit_rate=23.81%`,
+   `trades_per_week=8.10`, `cagr_15slot=+52.09%` on train — reported here for completeness, not
+   selected, since `select_best_config`'s fallback tier still prioritizes `hit_rate` among
+   frequency-qualifying cells over raw `cagr_15slot`.
+2. **`hit_rate` still never approaches the 90% bar anywhere in the widened grid.** The single
+   highest `hit_rate` among all 240 cells is 48.19% (`target_pct=0.10, stop_pct=0.10,
+   regime_gate=true`), and that cell fails the frequency floor (`trades_per_week=3.40 < 5`). Widening
+   target/stop fixed the sign and magnitude of returns; it did not — and structurally could not —
+   move `hit_rate` anywhere close to 90%. This confirms the two problems (returns vs. hit_rate) are
+   genuinely separate levers, not the same one.
+3. **This is the first configuration in the entire research line (sub-projects 1-5) with reliable,
+   positive `cagr_15slot` on both train and test simultaneously.** Every prior result in this line —
+   every E반등 configuration in sub-projects 3-4, and Section 3's original momentum-continuation
+   grid — was either underpowered, or reliable-but-negative. This is reliable and positive.
+
+**Updated verdict**: still formally **target-not-met** against this research line's strict joint
+bar (`hit_rate >= 90%` is not met anywhere, in either grid) — the 90% hit_rate requirement is simply
+not achievable with this entry signal at any target/stop shape tested so far, widened or not. But
+the widened grid demonstrates that, independent of the formal decision gate, a symmetric 10%/10%
+target/stop on this same entry signal is a reliable, profitable configuration on both splits
+(+27.93%/+29.80% CAGR), which is a materially different practical conclusion than Section 4's
+original "the strategy loses money" framing — that framing was specific to the narrow original
+grid's boundary, not to the entry signal itself.
+
+**Next step**: this is now a decision point rather than a further grid-search question — extending
+`target_pct`/`stop_pct` further (the grid already reached 30%/10% without finding a hit_rate anywhere
+near 90%) is unlikely to close the hit_rate gap, since points 2-3 above show target/stop shape and
+hit_rate are independent levers. The two live options: (a) treat the 90%-hit-rate joint bar as the
+wrong criterion for evaluating a momentum-continuation strategy specifically (a trend-following
+approach naturally trades a lower win rate for a much larger average win — the classic asymmetric
+payoff shape — and this line's 90% bar was originally calibrated for an oversold-bounce-style high-
+hit-rate approach), and evaluate this configuration instead against a return-focused bar (positive,
+reliable `cagr_15slot`, which it already clears); or (b) treat the 90% bar as non-negotiable across
+this entire research line for consistency and formally close momentum-continuation as
+target-not-met, pivoting to low-volatility-accumulation. This choice is a human decision about what
+this research line is actually optimizing for, not one this analysis can make unilaterally.
+
 ---
 
 No production code (`src/swing-scanner.src.js`) has been changed by this sub-project — as with
