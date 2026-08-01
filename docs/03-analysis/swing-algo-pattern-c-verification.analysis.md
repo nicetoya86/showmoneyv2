@@ -61,17 +61,17 @@ From `backtest_pattern_c_grid_results.json`'s `summary` block, across all 216 tr
 | Cells clearing `trades_per_week >= 5` | 216 / 216 |
 | Cells with `cagr_15slot > 0` | **0 / 216** |
 | Cells clearing all three simultaneously (full train-side gate) | **0 / 216** |
-| Max `hit_rate` across the grid | 46.2287% |
-| Max `cagr_15slot` across the grid | -10.3644%/yr |
-| Min `cagr_15slot` across the grid | -25.9431%/yr |
+| Max `hit_rate` across the grid | 46.23% |
+| Max `cagr_15slot` across the grid | -10.36%/yr |
+| Min `cagr_15slot` across the grid | -25.94%/yr |
 
 As in every prior sub-project, frequency is never the binding constraint — all 216 cells clear
 `trades_per_week >= 5`. The binding constraint is `cagr_15slot`: not one cell out of 216 is
 profitable on train. The best any cell manages is `target_pct=10%, stop_pct=1%, min_score=90,
-regime_gate=False` — `n_trades=1025, hit_rate=6.634%, avg_pnl=-0.4061%, cagr_15slot=-10.364%,
-mdd_15slot=-24.989%`. The worst cell is `target_pct=3%, stop_pct=4%, min_score=90,
-regime_gate=False` — `n_trades=1231, hit_rate=46.223%, cagr_15slot=-25.943%,
-mdd_15slot=-52.526%`.
+regime_gate=False` — `n_trades=1025, hit_rate=6.63%, avg_pnl=-0.41%, cagr_15slot=-10.36%,
+mdd_15slot=-24.99%`. The worst cell is `target_pct=3%, stop_pct=4%, min_score=90,
+regime_gate=False` — `n_trades=1231, hit_rate=46.22%, cagr_15slot=-25.94%,
+mdd_15slot=-52.53%`.
 
 A trader's honest read: the same shape recurs — tight-target/wide-stop cells buy a moderate hit
 rate but bleed cagr, wide-target/tight-stop cells preserve cagr somewhat (still deeply negative)
@@ -90,15 +90,15 @@ descending) selected:
 | Metric | Train | Test |
 |---|---:|---:|
 | `n_trades` | 1,233 | 782 |
-| `hit_rate` | 46.2287% | 44.2455% |
-| `trades_per_week` | 9.474 | 9.971 |
-| `avg_pnl` | -0.8825% | -1.0509% |
-| `cagr_15slot` | -25.5644%/yr | -31.5021%/yr |
-| `mdd_15slot` | -51.9218% | -43.4191% |
+| `hit_rate` | 46.23% | 44.25% |
+| `trades_per_week` | 9.47 | 9.97 |
+| `avg_pnl` | -0.88% | -1.05% |
+| `cagr_15slot` | -25.56%/yr | -31.50%/yr |
+| `mdd_15slot` | -51.92% | -43.42% |
 
 Both splits clear `n_trades >= 50` by more than an order of magnitude (1,233 and 782), so this
 result is statistically reliable, not a small-sample artifact. Both splits clear
-`trades_per_week >= 5` comfortably (9.474 and 9.971). Both splits fail `hit_rate >= 90%` badly
+`trades_per_week >= 5` comfortably (9.47 and 9.97). Both splits fail `hit_rate >= 90%` badly
 (short by 43.77pp train, 45.75pp test) and both splits fail `cagr_15slot > 0` (both deeply
 negative).
 
@@ -120,14 +120,14 @@ hope a real catalyst would behave more consistently across time, not less.
 Applying the three-way outcome framework (target-met / target-not-met-but-reliable /
 underpowered) used by every prior sub-project in this line:
 
-- **Not target-met**: `hit_rate` is 46.2287% (train) and 44.2455% (test) — both roughly 44-46
+- **Not target-met**: `hit_rate` is 46.23% (train) and 44.25% (test) — both roughly 44-46
   percentage points short of the 90% bar. `selection['status'] == "target_not_met"` confirms this
-  directly. `cagr_15slot` is negative on both splits (-25.5644% train, -31.5021% test), so even
+  directly. `cagr_15slot` is negative on both splits (-25.56% train, -31.50% test), so even
   setting the 90% hit_rate bar aside, this configuration would not be a profitable deployment
   candidate on cagr grounds alone.
 - **Reliable, not underpowered**: `n_trades = 1,233` (train) and `782` (test) both clear the
   `n_trades >= 50` statistical-reliability floor by more than an order of magnitude.
-  `trades_per_week = 9.474` (train) and `9.971` (test) both clear the `>= 5` frequency floor. Every
+  `trades_per_week = 9.47` (train) and `9.97` (test) both clear the `>= 5` frequency floor. Every
   leg of the three-way framework except the 90% hit_rate bar (and the `cagr_15slot > 0` bar) is
   cleared on both splits.
 
@@ -161,16 +161,20 @@ it is described qualitatively only.
   cagr_15slot=-12.61%`.
 - **Pooled A+B+C+D, `exclude_d_box=False` subgrid**, re-derived from
   `backtest_grid_search_results.json`'s 432 `train_results` cells filtered to `exclude_d_box is
-  False` (216 cells, confirmed by direct count): grid max train `cagr_15slot` = **-10.4879%/yr**
+  False` (216 cells, confirmed by direct count): grid max train `cagr_15slot` = **-10.49%/yr**
   (`target_pct=6%, stop_pct=1%, min_score=60, regime_gate=True, n_trades=1104,
-  hit_rate=11.23%`), grid min = **-29.9593%/yr** (`target_pct=3%, stop_pct=4%, min_score=90,
+  hit_rate=11.23%`), grid min = **-29.96%/yr** (`target_pct=3%, stop_pct=4%, min_score=90,
   regime_gate=True, n_trades=1406, hit_rate=45.95%`). Re-applying the same fallback selection rule
   (filter `trades_per_week >= 5`, sort by `hit_rate` descending then `cagr_15slot` descending)
   within just this subgrid selects `target_pct=3%, stop_pct=4%, min_score=60, regime_gate=False`
-  with **train** `hit_rate=46.1376%, cagr_15slot=-29.3131%/yr, n_trades=1424`. As established in
+  with **train** `hit_rate=46.14%, cagr_15slot=-29.31%/yr, n_trades=1424`. As established in
   7a's corrected §5, this in-subgrid selection has no corresponding **test**-side figure —
   `backtest_grid_search_results.json` only computed a single `test_result`, for the original
-  mixed-pool (`exclude_d_box=True`) selection — so the pooled row below is train-only.
+  mixed-pool (`exclude_d_box=True`) selection — so the pooled row below is train-only. Note also
+  that this pooled subgrid's fallback-selected cell and C촉매's own selected cell share
+  `min_score=60`, while A눌림목's (7a) selected cell used `min_score=110` — a further
+  non-like-for-like axis on top of the slot-competition caveat, since the three
+  "fallback-selected" rows in the table below do not hold `min_score` constant across patterns.
 
 **Three-way comparison table (train-side; caveated per above — not a decomposition):**
 
@@ -195,9 +199,9 @@ direction). C촉매's grid-worst cell (-25.94%) is actually the *least bad* of t
 figures compared here. On hit_rate, C촉매's selected-config train figure (46.23%) sits almost
 exactly on top of the pooled subgrid's (46.14%) and meaningfully below A눌림목's (49.34%). Once test
 is considered, the picture diverges further: A눌림목's test numbers improve on its own train numbers
-(§3's finding from 7a), while C촉매's test numbers are worse than its own train numbers on cagr
-(§3 above) — so on an out-of-sample view, C촉매 looks like the weaker of the two isolated patterns,
-not just "in between" on a train-only view. None of this should be read as a rigorous decomposition
+(a finding from 7a's document's own §3), while C촉매's test numbers are worse than its own train
+numbers on cagr (this document's §3 above) — so on an out-of-sample view, C촉매 looks like the
+weaker of the two isolated patterns, not just "in between" on a train-only view. None of this should be read as a rigorous decomposition
 of either pattern's share of the pooled result — per the slot-competition caveat, each of these
 three numbers comes from a differently-selected portfolio of trades, not from partitioning one
 shared trade set into components. What can be said, properly caveated: C촉매 in isolation does not
@@ -243,7 +247,18 @@ the pooled result's weakness.
 - This sub-project inherits sub-project 1's simulation-machinery limitations: orderbook ask/bid
   ratio and pattern-C buy-ratio blocks are not modeled in the backtest simulation (confirmed still
   current per `docs/03-analysis/backtest.analysis.md`'s GAP-1/GAP-2 fix notes), since
-  `run_one_config` and its dependencies are reused unmodified.
+  `run_one_config` and its dependencies are reused unmodified. **This caveat weighs more heavily on
+  this sub-project than it did on 7a's A눌림목 result**: production holds back C촉매 signals when
+  the live buy-execution ratio falls below 40% (`TOSS_WEAK_BUY_RATIO_C` in
+  `src/swing-scanner.src.js`, lines ~1568/1691), a real-time filter `backtest/toss_liveprice.py`
+  explicitly cannot model historically (no historical equivalent, since it requires real-time
+  order-book/trade-tape data that does not exist historically — see that file's lines 18-22). This
+  session's 5,226-candidate / 1,233-train-trade pool is therefore a superset of what production
+  would have actually sent for C촉매 specifically — some measured "trades" here would never have
+  reached a real user.
+- **Flat round-trip fee assumption** — same inherited simulation-machinery limitation noted in
+  7a's Limitations section: the backtest simulation assumes a flat round-trip fee, not a
+  size/liquidity-sensitive one.
 - **Unmeasured-patterns caveat**: A눌림목's and B지지선's own pooled contributions remain separately
   unmeasured (isolated ≠ pooled share, per the slot-competition caveat). B지지선 was superseded by a
   purpose-built replacement pattern (E반등, sub-project 4) that verified E반등, not B지지선 itself.
@@ -256,7 +271,9 @@ the pooled result's weakness.
 **No change to C촉매's current production deployment status is recommended.** No production code
 (`src/swing-scanner.src.js`) was touched by this sub-project — it is a pure verification exercise
 against already-committed backtest infrastructure and cached data. C촉매 continues running in
-production exactly as it does today, pending D박스's result in sub-project 7c.
+production exactly as it does today (subject to the `TOSS_WEAK_BUY_RATIO_C` caveat in §7 above —
+production does not send every signal this backtest counts as a trade), pending D박스's result in
+sub-project 7c.
 
 This finding does not surface a new lever worth pursuing: the 216-cell grid is exhaustive over the
 same axes used everywhere else in this research line, and it produces the now-familiar shape — 0/216

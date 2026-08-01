@@ -34,9 +34,10 @@ against the same decision gate used everywhere else in this research line.
 
 `backtest_candidates_with_paths.json` (sub-project 2's committed artifact, unmodified) already
 contains everything needed. Filtering `pattern_type == "C촉매"` yields **5,226 candidates**
-(verified directly against the file this session), split `hold_days=2` (5,030, the pattern's
-production default) vs `hold_days=5` (196, grade `강매` override via production's `getHoldDays()`
-logic — both already baked into the cached `hold_days` field). Date range spans
+(verified directly against the file this session), split `hold_days=5` (5,030, grade `강매`
+override via production's `getHoldDays()` logic) vs `hold_days=2` (196, the pattern's own default
+absent that override) — both already baked into the cached `hold_days` field, and note the
+override cell is the majority here, not the pattern default. Date range spans
 `2022-01-04`..`2025-12-30`, matching every prior sub-project's universe/range convention.
 
 **No new candidate generation.** `generate_signal_candidates.py`'s `evaluate_candidate()` is not
@@ -94,8 +95,8 @@ introduced.
 ## 6. Testing
 
 No new source code, so no new unit tests. Sanity check to run and report during execution: confirm
-the filtered pool is exactly 5,226 candidates with the expected `hold_days` split (5,030 at 2 days
-/ 196 at 5 days, per this session's direct inspection) before running the grid — if the count
+the filtered pool is exactly 5,226 candidates with the expected `hold_days` split (5,030 at 5 days
+/ 196 at 2 days, per this session's direct inspection) before running the grid — if the count
 doesn't match, investigate before proceeding.
 
 ## 7. Limitations
