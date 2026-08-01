@@ -110,6 +110,14 @@ parameters. Both criteria point to the same pool, so item 5's ATR grid was run o
 pool**, not any tagged subset. This choice is recorded here explicitly, per the plan's instruction
 to treat it as a reported decision rather than a hidden detail.
 
+Note on comparability: `atr_stop_grid_search.py`'s `run_one_atr_config` applies no
+`min_score`/`regime_gate`/`exclude_d_box` filtering at all — this is by design, per the design
+doc's explicit scoping of those axes out of the ATR script (design doc §Stage 3). Because of this,
+the ATR grid's trade counts (train 66-75 per cell below) are naturally larger than Section 2/3's
+gated flat-grid cells and are not directly comparable to them on that basis — the larger `n_trades`
+seen in Stage 3 is a byproduct of the ungated comparison, not evidence that the ATR mechanism or
+the pool choice performs better.
+
 The 16-cell ATR grid (`target_mult ∈ {1.0, 1.5, 2.0, 3.0}` × `stop_mult ∈ {0.5, 1.0, 1.5, 2.0}`) on
 train (`backtest_oversold_atr_grid_results.json`):
 
@@ -198,9 +206,11 @@ Restating the design doc's §7 limitations, not re-deriving them:
   no combination with `n_trades >= 50` on both splits. That is exactly what happened: Stage 1's
   own untagged pool was already underpowered (21/23), and every one of the 7 tag subsets in Stage 2
   compounds that (down to single digits or low 40s on train, ≤18 on test). Stage 3's ATR grid,
-  even after choosing the single most favorable of the 8 available pools, still landed at test
-  `n_trades=47` — just 3 trades short of the reliability bar, the closest any part of this
-  sub-project came to a reliable joint (both-split) result.
+  run on the pool with the largest test `n_trades` of the 8 (§4's pool selection), still landed at
+  test `n_trades=47` — just 3 trades short of the reliability bar, the closest any part of this
+  sub-project came to a reliable joint (both-split) result. Note this larger sample is a byproduct
+  of `atr_stop_grid_search.py` applying no `min_score`/`regime_gate`/`exclude_d_box` filtering
+  (§4), not evidence of the pool choice or ATR mechanism performing better.
 - Inherits Phase B's other limitations (orderbook ask/bid and pattern-C blocks not modeled,
   flat-fee assumption) via the reused, unmodified simulation primitives; Stage 3's ATR-based
   target/stop replaces the flat-percentage assumption specifically, but the rest is unchanged.
@@ -214,8 +224,10 @@ reliable result available (Stage 3 train, n=67) misses the hit_rate bar by an or
 (5.97% vs. 90%) rather than by a narrow margin — this line of the E반등 hypothesis, with all 5
 trader-diagnosed levers now applied, **should be considered complete**. Further hand-tuning of any
 single lever (e.g., sweeping the ATR multiplier grid further, adjusting the pivot-low tolerance, or
-loosening the 2-day confirmation) is not a reasonable next step: none of the 32 (16 Stage 3 + 16 in
-the broader all-pool space) configurations examined here came remotely close to the 5-per-week
+loosening the 2-day confirmation) is not a reasonable next step: none of the **3,481** evaluated
+configurations examined across this sub-project (8 pools [∅ untagged + 7 tag subsets] × 432
+flat-grid train cells + 8 corresponding test evaluations = 3,464, plus the ATR grid's 16 train
+cells + 1 test evaluation = 17; 3,464 + 17 = 3,481) came remotely close to the 5-per-week
 frequency floor, so the binding constraint is structural (the pattern is simply too rare in this
 universe/date-range at any of the tested parameterizations) rather than a fine-tuning problem that
 one more parameter sweep would fix.
