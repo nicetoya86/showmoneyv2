@@ -32,6 +32,12 @@ together, on top of the reused liquidity/quality base filters:
    ordering.
 4. **Base filters** — the existing liquidity/quality gates reused unmodified (`MIN_PRICE`,
    `MIN_TURNOVER_ALGO`, no negative DART disclosure, no large net-sell supply flag, `rvol >= 1.0`).
+   Note: `evaluate_candidate()`'s base filters (`backtest/swing_signal_engine.py` lines 112-121)
+   also include an `rsi14 < 40` exclusion gate; that gate is deliberately **not** reused here — a
+   candidate already sitting at a 60-day new high with `close > sma50 > sma200` is structurally
+   almost never also oversold (`rsi14 < 40`), so the gate would rarely fire on this pattern's
+   candidates anyway. It is omitted rather than redundant-but-harmless, and this document states
+   that plainly instead of implying strict filter parity with `evaluate_candidate()`.
 
 `entry = close[idx]`, `entry_idx = idx+1`, `hold_days = 10` — a single-day trigger with no
 multi-day confirmation. Full rationale, formulas, and parameter values are in the design doc
@@ -102,7 +108,7 @@ parameterization does not work.
 
 Momentum-continuation's entry conditions (RS-percentile leadership + new high + SMA50/SMA200
 alignment) are evidently far more common in this universe than E반등's oversold-recovery
-conditions: this scan produced **4,197 candidates**, roughly **30-35x** more than any E반등 pool in
+conditions: this scan produced **4,197 candidates**, roughly **~33-35x** more than any E반등 pool in
 sub-projects 3-4 (which ranged **119-127** candidates before any tag/confirmation filtering). That
 volume of candidates is precisely why this hypothesis produced a statistically decisive result on
 its first attempt — a single hand-specified rule, no tuning, no additive levers — where E반등 could
@@ -125,6 +131,13 @@ Restating the design doc's §7 limitations, not re-deriving them:
   one-time precompute, not per-grid-cell.
 - `hold_days = 10` is a one-time judgment call, not swept; a negative result should not be read as
   ruling out momentum-continuation at other holding periods.
+- **Static, survivors-only universe** (new to this sub-project) — the 959-ticker operating universe
+  is a fixed, current-day list, and this sub-project's relative-strength percentile is the first
+  cross-sectional signal in this research line: it is computed against tickers currently in that
+  list only, so delisted/renamed tickers are absent from the comparison set. The bias direction
+  cannot flip the verdict, though — a survivors-only universe raises the top-10% cutoff and selects
+  for stronger names, i.e. it flatters the strategy if anything, and the result (target-not-met,
+  reliably) is still decisively negative despite that.
 
 Because this sub-project's result is **reliable** (not underpowered), these limitations are about
 parameter choice, not sample size — a genuinely different situation from every E반등 analysis, where
@@ -133,15 +146,27 @@ the numbers can be trusted; the question is only which rule/parameterization was
 
 ## 7. Next Step Recommendation
 
-Two structural facts point to where the next iteration should focus, both drawn directly from the
+Three structural facts point to where the next iteration should focus, all drawn directly from the
 same grid search result:
 
 1. The selected cell's risk/reward shape is inverted: `target_pct=0.03` (3%) is *tighter* than
    `stop_pct=0.04` (4%) — the strategy is set up to lose more on a stop-out than it gains on a
-   target hit, before even considering hit_rate. This is an unusual, arguably backwards
-   parameterization for a momentum-continuation bet, which should structurally want room to run
-   (wider target) and a tighter stop, not the reverse.
-2. `selection.fallback_best_cagr` in the same grid search result — the single train cell with the
+   target hit, before even considering hit_rate. This looks like a backwards parameterization for
+   a momentum-continuation bet at first glance — but the full grid (next point) shows the actual
+   lever is a *wider target*, not a tighter stop: every `stop_pct` tighter than the grid's own
+   maximum (0.04) produced zero positive-`cagr_15slot` cells, at any `target_pct`.
+2. Checking all 432 train cells directly (not just the reported fallback) confirms this is not a
+   one-off: exactly **6 cells** have `cagr_15slot > 0`, and every one of them sits at
+   `target_pct=0.10` **and** `stop_pct=0.04` simultaneously — both the maximum value in their
+   respective grids (`GRID_TARGET_PCT = [0.03, 0.04, 0.05, 0.06, 0.08, 0.10]`, `GRID_STOP_PCT =
+   [0.01, 0.015, 0.02, 0.025, 0.03, 0.04]`, both defined in `backtest/target_stop_grid_search.py`).
+   The 6 cells differ only in `min_score` (60/90/110) and `exclude_d_box` (false/true); the other 5
+   `stop_pct` values tested (0.01, 0.015, 0.02, 0.025, 0.03) produce no positive-`cagr_15slot` cell
+   at *any* `target_pct`, including at `target_pct=0.10`. So the pattern spans **both grid axes at
+   once**, not `target_pct` alone — a follow-up that only widens `target_pct` past 0.10 while
+   leaving `stop_pct` clamped at its 0.04 ceiling can't tell whether target, stop, or their ratio
+   is the actual lever.
+3. `selection.fallback_best_cagr` in the same grid search result — the single train cell with the
    highest `cagr_15slot` across all 432 cells, reported for diagnostic purposes even though it
    wasn't selected (selection prioritizes hit_rate among frequency-qualifying cells, per
    `select_best_config`'s tie-break rule) — is `target_pct=0.10, stop_pct=0.04, min_score=60,
@@ -156,10 +181,10 @@ do not jump straight to a sub-project-4-style hit-rate-improvement follow-up (ad
 volume/sector/support tags) — those levers helped E반등's hit_rate only marginally and never solved
 its actual (frequency) problem, whereas momentum-continuation's actual problem is not frequency
 (already solved) but target/stop shape. The next sub-project should **re-run the existing 432-cell
-grid with a wider `target_pct` range** (e.g. extending past the current max of 0.10, and/or
-removing the artificial constraint that ties `target_pct < stop_pct` combinations to the same
-tight grid) to determine whether a right-sized risk/reward shape — not a smarter entry signal — is
-the actual lever this pattern needs. Only if a materially wider target/stop sweep still fails to
+grid with wider ranges on *both* `target_pct` and `stop_pct`** (extending past their current maxima
+of 0.10 and 0.04 respectively) to determine whether a right-sized risk/reward shape — not a smarter
+entry signal — is the actual lever this pattern needs, and to isolate whether target, stop, or
+their ratio is doing the work. Only if a materially wider target/stop sweep still fails to
 produce a cell with positive `cagr_15slot` and a plausible path to `hit_rate >= 90%` should this
 hypothesis be closed and the research line pivot to low-volatility-accumulation, the other
 deferred hypothesis named in the original Phase B design doc.

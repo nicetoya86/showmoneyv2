@@ -103,12 +103,15 @@ def _is_momentum_continuation(df: pd.DataFrame, idx: int, *, rs_threshold: Optio
 def _passes_base_filters(
     df: pd.DataFrame, idx: int, *, supply: Dict[str, float], dart_items: List[str]
 ) -> bool:
-    """Liquidity/quality gates matching evaluate_candidate()'s base filters
-    (backtest/swing_signal_engine.py lines 112-121) in content -- a fresh local
-    implementation, not an import, since generate_oversold_candidates.py's own copy of this
-    logic is module-private (leading underscore) and not meant to be imported cross-module,
-    per this line's established convention (see atr_stop_grid_search.py's _window_df for the
-    same reasoning)."""
+    """Reuses 4 of evaluate_candidate()'s base-filter gates (backtest/swing_signal_engine.py's
+    MIN_PRICE, MIN_TURNOVER_ALGO, negative-DART-disclosure, and net-sell-supply checks, plus
+    rvol >= 1.0) -- a fresh local implementation, not an import, since
+    generate_oversold_candidates.py's own copy of this logic is module-private (leading
+    underscore) and not meant to be imported cross-module, per this line's established
+    convention (see atr_stop_grid_search.py's _window_df for the same reasoning).
+    Deliberately does NOT reuse evaluate_candidate()'s `rsi14 < 40` exclusion gate
+    (swing_signal_engine.py ~lines 117-118) -- see the analysis report for why that's safe to
+    omit for this pattern."""
     close = df["close"].to_numpy(dtype="float64")
     vol = df["volume"].to_numpy(dtype="float64")
     current_price = float(close[idx])
