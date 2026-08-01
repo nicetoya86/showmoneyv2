@@ -37,8 +37,11 @@ liquidity/quality base filters:
 1. **Relative-strength leadership**: the ticker's own trailing-60-trading-day return
    (`close[idx] / close[idx-60] - 1`) ranks in the top 10% of the same day's cross-sectional
    distribution of trailing-60-day returns across the full 959-ticker operating universe.
-2. **New high**: `close[idx] >= max(high[idx-60..idx])` — the trigger day's close is at or above
-   the trailing 60-trading-day high (roughly a 3-month new high).
+2. **New high**: `close[idx] >= max(high[idx-60..idx-1])` — the trigger day's close is at or above
+   the *prior* 60 trading days' high, excluding today (roughly a 3-month new high). Excluding
+   `idx` itself is deliberate: including today's own high (which is always `>= close[idx]` in real
+   OHLC data) would make this condition nearly unsatisfiable — a genuine breakout must exceed what
+   came *before* today, not today's own intraday range.
 3. **Trend alignment**: `close[idx] > sma50[idx] > sma200[idx]` — classic "stage 2 uptrend"
    ordering, using the existing `sma()` function from `backtest/indicators.py`.
 4. **Base filters** (reused unmodified from `evaluate_candidate()`'s liquidity/quality gates,
@@ -46,8 +49,10 @@ liquidity/quality base filters:
    `current_price * volume[idx] >= MIN_TURNOVER_ALGO`, no negative DART disclosure match, no
    large net-sell supply flag, `rvol >= 1.0`.
 
-`entry = close[idx+1]`, `entry_idx = idx+2`, `hold_days = 10` — a single-day trigger, no multi-day
-confirmation layer (unlike E반등's later-added 2-day confirmation). This phase deliberately stays a
+`entry = close[idx]`, `entry_idx = idx+1`, `hold_days = 10` — a single-day trigger, no multi-day
+confirmation layer (unlike E반등's later-added 2-day confirmation, which is why E반등 shifted to
+`entry = close[idx+1]`/`entry_idx = idx+2`; this pattern has no such shift since it never delays
+the trigger a day for confirmation). This phase deliberately stays a
 single hand-specified rule, matching Phase B's own original scope note ("this phase is one
 hand-specified rule") — additive refinements are only justified after seeing whether the base rule
 is even directionally promising, the same conditional-next-step discipline this line has used
