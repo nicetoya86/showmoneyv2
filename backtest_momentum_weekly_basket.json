@@ -1,0 +1,20 @@
+{
+  "train": {
+    "total_trades": 1038,
+    "n_weeks": 107,
+    "avg_basket_size": 9.700934579439252,
+    "weeks_positive": 61,
+    "weeks_positive_pct": 57.009345794392516,
+    "weeks_ge_3pct": 37,
+    "weeks_ge_3pct_pct": 34.57943925233645
+  },
+  "test": {
+    "total_trades": 854,
+    "n_weeks": 79,
+    "avg_basket_size": 10.810126582278482,
+    "weeks_positive": 42,
+    "weeks_positive_pct": 53.16455696202531,
+    "weeks_ge_3pct": 22,
+    "weeks_ge_3pct_pct": 27.848101265822784
+  }
+}

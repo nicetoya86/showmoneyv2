@@ -1,0 +1,118 @@
+{
+  "config_a_10_10": {
+    "False": {
+      "train": {
+        "target_pct": 0.1,
+        "stop_pct": 0.1,
+        "min_score": 60,
+        "regime_gate": false,
+        "exclude_d_box": false,
+        "n_trades": 1038,
+        "hit_rate": 0.44315992292870904,
+        "trades_per_week": 7.9758507135016465,
+        "avg_pnl": 0.006349993580698115,
+        "cagr_15slot": 0.27932642636657,
+        "mdd_15slot": -0.23789671736447615
+      },
+      "test": {
+        "target_pct": 0.1,
+        "stop_pct": 0.1,
+        "min_score": 60,
+        "regime_gate": false,
+        "exclude_d_box": false,
+        "n_trades": 854,
+        "hit_rate": 0.4531615925058548,
+        "trades_per_week": 10.88888888888889,
+        "avg_pnl": 0.005860839783798096,
+        "cagr_15slot": 0.2979714375434701,
+        "mdd_15slot": -0.2522456374534475
+      }
+    },
+    "True": {
+      "train": {
+        "target_pct": 0.1,
+        "stop_pct": 0.1,
+        "min_score": 60,
+        "regime_gate": true,
+        "exclude_d_box": false,
+        "n_trades": 442,
+        "hit_rate": 0.4819004524886878,
+        "trades_per_week": 3.3962678375411635,
+        "avg_pnl": 0.012599037638893206,
+        "cagr_15slot": 0.22180051311964588,
+        "mdd_15slot": -0.13233337698477654
+      },
+      "test": {
+        "target_pct": 0.1,
+        "stop_pct": 0.1,
+        "min_score": 60,
+        "regime_gate": true,
+        "exclude_d_box": false,
+        "n_trades": 481,
+        "hit_rate": 0.5051975051975052,
+        "trades_per_week": 6.1329690346083785,
+        "avg_pnl": 0.011375575800353291,
+        "cagr_15slot": 0.4076303830741823,
+        "mdd_15slot": -0.14485097211679623
+      }
+    }
+  },
+  "config_b_3_100": {
+    "False": {
+      "train": {
+        "target_pct": 0.03,
+        "stop_pct": 1.0,
+        "min_score": 60,
+        "regime_gate": false,
+        "exclude_d_box": false,
+        "n_trades": 944,
+        "hit_rate": 0.8050847457627118,
+        "trades_per_week": 7.253567508232711,
+        "avg_pnl": 0.0014905965604019027,
+        "cagr_15slot": 0.045989362995618066,
+        "mdd_15slot": -0.1524587169953804
+      },
+      "test": {
+        "target_pct": 0.03,
+        "stop_pct": 1.0,
+        "min_score": 60,
+        "regime_gate": false,
+        "exclude_d_box": false,
+        "n_trades": 755,
+        "hit_rate": 0.8119205298013245,
+        "trades_per_week": 9.626593806921676,
+        "avg_pnl": 0.002229313649641749,
+        "cagr_15slot": 0.07702603792266216,
+        "mdd_15slot": -0.129284377938215
+      }
+    },
+    "True": {
+      "train": {
+        "target_pct": 0.03,
+        "stop_pct": 1.0,
+        "min_score": 60,
+        "regime_gate": true,
+        "exclude_d_box": false,
+        "n_trades": 392,
+        "hit_rate": 0.8061224489795918,
+        "trades_per_week": 3.0120746432491767,
+        "avg_pnl": -0.001328821770165186,
+        "cagr_15slot": -0.004573634295807483,
+        "mdd_15slot": -0.09953329097259501
+      },
+      "test": {
+        "target_pct": 0.03,
+        "stop_pct": 1.0,
+        "min_score": 60,
+        "regime_gate": true,
+        "exclude_d_box": false,
+        "n_trades": 412,
+        "hit_rate": 0.8203883495145631,
+        "trades_per_week": 5.253187613843352,
+        "avg_pnl": 0.003848598405935658,
+        "cagr_15slot": 0.12282520609165415,
+        "mdd_15slot": -0.09051019320259339
+      }
+    }
+  }
+}

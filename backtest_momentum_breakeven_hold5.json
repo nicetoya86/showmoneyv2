@@ -1,0 +1,35 @@
+{
+  "params": {
+    "initial_stop_pct": 0.03,
+    "trigger_pct": 0.015,
+    "hold_days": 5
+  },
+  "results": {
+    "train": {
+      "n_trades": 1012,
+      "breakeven_rate": 0.44466403162055335,
+      "trades_per_week": 7.776070252469814,
+      "avg_pnl": 0.0014869912076739393,
+      "cagr_15slot": 0.031357655700504194,
+      "result_counts": {
+        "timeout_protected": 124,
+        "initial_stop": 558,
+        "breakeven_stop": 326,
+        "timeout": 4
+      }
+    },
+    "test": {
+      "n_trades": 809,
+      "breakeven_rate": 0.449938195302843,
+      "trades_per_week": 10.31511839708561,
+      "avg_pnl": 0.005181378945148321,
+      "cagr_15slot": 0.19375288063035545,
+      "result_counts": {
+        "breakeven_stop": 261,
+        "initial_stop": 444,
+        "timeout_protected": 103,
+        "timeout": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "params": {
+    "RS_TOP_FRAC": 0.02,
+    "BREAKOUT_MARGIN": 1.02,
+    "TRIGGER_RVOL_MIN": 2.0,
+    "HOLD_DAYS": 5,
+    "target_pct": 0.03,
+    "stop_pct": 0.5
+  },
+  "candidate_count": 697,
+  "skipped_tickers": [
+    "042670.KS",
+    "450140.KS",
+    "019440.KS",
+    "448830.KQ"
+  ],
+  "train_result": {
+    "target_pct": 0.03,
+    "stop_pct": 0.5,
+    "min_score": 60,
+    "regime_gate": false,
+    "exclude_d_box": false,
+    "n_trades": 249,
+    "hit_rate": 0.8032128514056225,
+    "trades_per_week": 1.9132821075740944,
+    "avg_pnl": -0.0006134240049014589,
+    "cagr_15slot": -0.0014083632217998243,
+    "mdd_15slot": -0.047242899128753554
+  },
+  "test_result": {
+    "target_pct": 0.03,
+    "stop_pct": 0.5,
+    "min_score": 60,
+    "regime_gate": false,
+    "exclude_d_box": false,
+    "n_trades": 208,
+    "hit_rate": 0.75,
+    "trades_per_week": 2.652094717668488,
+    "avg_pnl": -0.014781865356357525,
+    "cagr_15slot": -0.1424781273753032,
+    "mdd_15slot": -0.22865622470712504
+  }
+}
