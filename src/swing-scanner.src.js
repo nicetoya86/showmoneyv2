@@ -32,7 +32,7 @@ const run = async function () {
   const VIX_HIGH_THRESH    = 25;
 
   // ===== 진입 신호 상수 — 30종목 복기 기반 v1.0 =====
-  const MIN_SCORE_FINAL        = 60;
+  const MIN_SCORE_FINAL        = 90; // 60-89 구간이 유일한 순손실 구간으로 확인돼(-0.69%/trade, n=40) 상향 (docs/03-analysis/swing-algorithm-profitability-review.analysis.md #5)
   const MIN_TURNOVER_ALGO      = 5_000_000_000;
   const SCORE_STRONG_FINAL     = 110;
   const MIN_RR_RATIO_FINAL     = 1.5;
