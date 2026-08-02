@@ -157,6 +157,7 @@ def backtest_swing_v2(
                 "exit_price": float(sim["exit_price"]), "result": sim["result"],
                 "days_held": sim["days_held"], "pnl": pnl,
                 "gross_pnl": gross_pnl, "toss_status": toss.status,
+                "aux_features": cand.aux_features,
                 **({"tranches": sim["tranches"]} if "tranches" in sim else {}),
             })
 
