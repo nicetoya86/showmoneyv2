@@ -233,6 +233,16 @@ small synthetic OHLC DataFrames, not live data):
   uncertainty this sub-project introduces. The conservative tie-break biases the simulation
   slightly pessimistic relative to whatever production's real intraday order actually is; this
   cannot be resolved without intraday data, which this repo does not have access to.
+  **Correction from final whole-branch review**: this "pessimistic" framing holds for the
+  multi-threshold same-bar tie-break itself, but does **not** hold for the trailing-stop fill price
+  specifically — `simulate_exit_partial()` fills a trailing exit at `running_high * (1 -
+  trailing_pct)` regardless of the fill day's own open, and in the large majority of trailing exits
+  (977/1,493, independently verified) that booked level sits above where the stock was actually
+  tradeable that day, making the implemented convention *more* favorable to the trader than either
+  coherent alternative. See
+  `docs/03-analysis/swing-algo-partial-exit-simulation.analysis.md`'s Limitations section for the
+  full quantified finding (concrete example, cause breakdown, and re-pricing sensitivity check) —
+  not duplicated here.
 - **Flat, non-per-fill transaction cost** (Section 6) — same inherited limitation as every prior
   sub-project, now explicitly extended to assume fee scales with sold value, not number of fills.
 - Inherits every limitation already documented for the underlying Line A pipeline this attaches

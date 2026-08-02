@@ -112,7 +112,14 @@ The exit mechanism makes the headline number **substantially better, but it is n
 does not flip the sign.** Quantified: win rate moves +20.18pp (32.17% → 52.35%), avg PnL moves
 +0.484pp (-0.478% → +0.0066%), and portfolio CAGR at N=15 moves from -26.03%/yr to -1.59%/yr — a
 reduction in annual loss of roughly 94% in absolute magnitude, with MDD improving from -70.00% to
--32.67%. This is a dramatic, real improvement, and it is honest to say the prior -26%/yr headline
+-32.67%. **This magnitude of improvement is not a settled fact — it is sensitive to the
+trailing-stop fill-price convention documented in Limitations below.** Under the convention actually
+implemented (fill at the computed level regardless of the fill day's own open), the improvement is
+as dramatic as stated above; under a next-open stop-fill convention, avg PnL and CAGR both move
+substantially the other direction (see Limitations for the reproduced numbers). The qualitative
+bottom line — a real, large improvement in degree, not a sign flip, entry signal still lacks
+positive edge — holds either way, but the precise size of the improvement should not be quoted as a
+single settled number. With that caveat, it is still honest to say the prior -26%/yr headline
 was in substantial part an artifact of assuming a full-target-or-bust exit model that does not
 match what production actually tells users to do — most of the apparent loss was hiding a real
 exit-discipline benefit that no backtest in this repo had measured until now.
@@ -151,9 +158,37 @@ Restated in substance from the design doc's Section 10 (see that document for fu
   sub-project introduces. Because the cached OHLC data has no intraday tick data, any day on which
   more than one threshold could plausibly have been crossed (e.g. a low that undercuts the trailing
   stop and a high that clears +4% on the same day) is resolved by a documented, conservative
-  tie-break (worse-for-the-trader outcome checked first). This biases the simulation slightly
-  pessimistic relative to whatever production's real intraday order actually is, and cannot be
-  resolved without intraday data this repo does not have access to.
+  tie-break (worse-for-the-trader outcome checked first). **For the multi-threshold tie-break
+  itself this is a reasonable "pessimistic" framing. But for the trailing-stop *fill price*
+  specifically, a final whole-branch review found the opposite is true**: `simulate_exit_partial()`
+  fills the trailing exit at `running_high * (1 - trailing_pct)` regardless of where the fill day
+  actually opened, and in the large majority of trailing exits that computed level sits *above*
+  where the stock was actually tradeable that day — this is systematically more favorable to the
+  trader than either coherent alternative (continuous intraday tracking, or a realistic
+  next-open stop-order fill), not "slightly pessimistic." See the subsection immediately below for
+  the quantified finding and its effect on the headline numbers.
+- **Trailing-stop fill-price optimism (found in final review, not caught during implementation).**
+  Across the 1,493 trades that resolve via `trail` or `target4_then_trail`, in 977 of them (65.4%,
+  independently re-verified against the committed JSON this session) the fill day's own `open`
+  price is already below the booked trailing-stop fill price — meaning the model books a fill the
+  stock could not actually have been sold at, always to the trader's benefit. Replaying the
+  running-high state machine day-by-day shows the mechanism in the large majority of these cases
+  (974 of 977): the trailing level is computed from `running_high` as of the *previous* day's
+  close and is never re-checked against that same prior day's own low — so when the level jumps up
+  off a fresh high made the day before, and the position finally exits the next day, the fill can be
+  booked well above where the stock has already fallen to by that day's open. Concrete example
+  already in the committed data: ticker `085910.KQ`, signal `2022-01-13`, entry 5650 — the +2%
+  trigger fires `2022-01-14` (day's high 6480 sets `running_high=6480`), and the remaining 70% books
+  a trailing exit on `2022-01-17` at 6285.60 (`6480 * 0.97`) — but `2022-01-17`'s own open was 5990,
+  4.9% below the booked fill. Re-pricing every `stop`/`trail` fill in the whole 2,686-trade dataset
+  as `min(booked_level, open_of_fill_day)` — the standard convention for a stop order that only
+  becomes executable at the next tradable open once triggered — was reproduced exactly against the
+  committed JSON: avg net PnL moves from +0.0066% to **-0.9155%**, and portfolio CAGR at N=15 moves
+  from -1.59%/yr to **-34.79%/yr** (MDD -81.84%, win_rate 42.63%) — i.e. *worse* than the
+  binary-model baseline's -26.03%/yr. This is reported as a sensitivity check under an alternative,
+  arguably more realistic fill convention, not as a replacement headline number — the actually
+  implemented convention is what's in the committed JSON and is internally consistent, just
+  previously under-disclosed as favorable rather than pessimistic.
 - **Flat, non-per-fill transaction cost.** The existing ~0.2% round-trip cost is applied once to
   the blended `gross_pnl` across all tranches, assuming fee scales with sold value rather than
   number of fills. This is the same flat-fee simplification every prior sub-project in this
@@ -173,10 +208,13 @@ Restated in substance from the design doc's Section 10 (see that document for fu
 
 This finding does **not** change the recommended next step from the honest trader-perspective gap
 review that opened this priority list. The exit mechanism turned out to be a large, real
-improvement in *degree* (loss cut by ~94% at N=15) but not a *sign flip* — the realistic exit
-discipline still lands at -1.59%/yr at the one concurrency level production can actually deliver,
-and the underlying per-trade edge is a statistical wash (+0.0066% avg PnL), not a demonstrated
-profit. Because the exit-mechanism question is now answered — and answered as "meaningfully
+improvement in *degree* (loss cut by ~94% at N=15 under the implemented fill convention — see
+Limitations for why that specific magnitude is a modeling-sensitive number, not a settled one) but
+not a *sign flip* — the realistic exit discipline lands at -1.59%/yr (implemented convention) to
+-34.79%/yr (next-open stop-fill convention) at the one concurrency level production can actually
+deliver, and the underlying per-trade edge is, at best, a statistical wash (+0.0066% avg PnL under
+the implemented convention, clearly negative under the alternative), not a demonstrated profit under
+either convention. Because the exit-mechanism question is now answered — and answered as "meaningfully
 better, still not profitable" rather than "was the whole problem" — this result reinforces, rather
 than displaces, **priority-3's re-fit of the scoring weights against real (not 30-stock hindsight)
 data and isolating B지지선** as the higher-leverage next step. Further tuning of the exit mechanism
