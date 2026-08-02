@@ -1,4 +1,6 @@
 pandas==2.2.3
 numpy==2.1.3
 requests==2.32.3
+scikit-learn==1.5.2  # sub-project 10 only: L2-regularized logistic regression for signal-weight
+                     # refit research script. Never imported from src/ or the n8n runtime.
 
