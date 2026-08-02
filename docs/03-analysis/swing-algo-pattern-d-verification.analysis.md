@@ -113,9 +113,11 @@ neither A눌림목's clear test-side improvement nor C촉매's test-side decline
 in the wrong direction out of sample: -19.29% train to -23.34% test, a further 4.05pp of
 annualized loss — smaller than C촉매's 5.94pp test-side cagr deterioration (7b), but the same
 direction, and unlike A눌림목's cagr, which improved by 8.61pp out of sample (7a). Drawdown improves
-out of sample here (mdd -33.14% test vs. -42.47% train), the same direction as C촉매's mdd (though
-D박스's absolute drawdown is materially smaller on both splits than either A눌림목's or C촉매's). A
-trader should read this as a third distinct generalization shape in this research line: A눌림목
+out of sample here (mdd -33.14% test vs. -42.47% train), the same direction as C촉매's mdd (D박스's
+train-side drawdown is the smallest of the three at -42.47%, vs. -45.16% for A눌림목 and -51.92% for
+C촉매; out of sample, though, A눌림목's -19.34% is materially smaller than D박스's -33.14%, which in
+turn beats C촉매's -43.42%). A trader should read this as a third distinct generalization shape in
+this research line: A눌림목
 looked steady-to-improving out of sample, C촉매 looked steady-to-worsening on both hit_rate and
 cagr, and D박스 looks flat on hit_rate but mildly worsening on cagr — not a reassuring signal for
 what is, after all, an exhaustive negative result on train already.
