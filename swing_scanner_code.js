@@ -114,7 +114,7 @@ const run = async function () {
   const VIX_HIGH_THRESH    = 25;
 
   // ===== 진입 신호 상수 — 30종목 복기 기반 v1.0 =====
-  const MIN_SCORE_FINAL        = 60;
+  const MIN_SCORE_FINAL        = 90; // 60-89 구간이 유일한 순손실 구간으로 확인돼(-0.69%/trade, n=40) 상향 (docs/03-analysis/swing-algorithm-profitability-review.analysis.md #5)
   const MIN_TURNOVER_ALGO      = 5_000_000_000;
   const SCORE_STRONG_FINAL     = 110;
   const MIN_RR_RATIO_FINAL     = 1.5;
@@ -1491,6 +1491,13 @@ const run = async function () {
         const isShortTrade = !isStrong && !isSurge && isPatternC && rvolVal >= 5.0;
         const grade = isStrong ? '강매' : isSurge ? '급등' : isShortTrade ? '매도차익' : '매수';
 
+        // ---- [REGIME-FIX] 시장 단계별 진입 차단 (2026-05-02 도입분 복원) ----
+        const rg = await getMarketRegime(store, today);
+        const regimeLevel = rg?.regimeLevel ?? 0;
+        const riskOn = regimeLevel < 2;
+        if (regimeLevel >= 2 && grade !== '강매') return; // 약세장: 강매 전용
+        if (regimeLevel >= 1 && grade === '매도차익') return; // 중립장: 매도차익 차단
+
         // ---- [T] 목표가·손절가 ----
         const atrAbs = calcAtrAbs(highD, lowD, dIdx, 14);
         const atrPct = atrAbs / currentPrice;
@@ -1531,7 +1538,7 @@ const run = async function () {
           entry: currentPrice, target, target1, stop,
           score, signals, dailyChange, currentPrice, prevClose,
           timeStr: timeStrNow, type: '스윙',
-          rankScore, atrAbs, rvolVal, riskOn: true, grade,
+          rankScore, atrAbs, rvolVal, riskOn, grade,
           patternType: isPatternC ? 'C촉매' : isPatternA ? 'A눌림목' : isPatternB ? 'B지지선' : 'D박스',
           isETF: false,
         });
@@ -1793,6 +1800,39 @@ const run = async function () {
   };
   // ===== /TOSS-CONFIRM =====
 
+  // ===== [INTRADAY-STOP-BREAKER] 당일 손절 서킷브레이커 =====
+  // 오늘 이미 보낸 추천 중 실시간가가 손절가 이하로 내려간 종목 수를 세어,
+  // INTRADAY_STOP_THRESH(2) 이상이면 당일 신규 발송을 억제한다(장이 안 좋은 날
+  // 계속 새 매수 신호를 보내는 것을 막기 위함). tossConfirm()과 동일한
+  // fail-safe 패턴(Toss API 키 미설정 시 스킵) 및 실시간가 조회 로직을 재사용한다.
+  const countTodayStopOuts = async (todayKey) => {
+    if (!_tossApiKey()) return 0; // Fail-Safe: 키 미설정 시 체크 자체를 스킵
+    const todays = (store.weeklyRecommendations && store.weeklyRecommendations[todayKey]) || [];
+    let stopCount = 0;
+    for (const rec of todays) {
+      try {
+        const [orderbook, trades] = await Promise.all([
+          toss.fetchOrderbook(rec.code),
+          toss.fetchTrades(rec.code, 5),
+        ]);
+        let livePrice = null;
+        if (Array.isArray(trades) && trades.length > 0) {
+          const p = Number(trades[trades.length - 1].price);
+          if (Number.isFinite(p) && p > 0) livePrice = p;
+        }
+        if (livePrice == null && orderbook && Array.isArray(orderbook.asks) && Array.isArray(orderbook.bids) && orderbook.asks[0] && orderbook.bids[0]) {
+          const bestAsk = Number(orderbook.asks[0].price), bestBid = Number(orderbook.bids[0].price);
+          if (Number.isFinite(bestAsk) && Number.isFinite(bestBid) && bestAsk > 0 && bestBid > 0) livePrice = (bestAsk + bestBid) / 2;
+        }
+        if (livePrice != null && Number.isFinite(rec.stop) && livePrice <= rec.stop) stopCount++;
+      } catch (e) {
+        // 라이브가 조회 실패 종목은 카운트에서 제외 (네트워크 오류로 신규 발송 전체를 막지 않기 위함)
+      }
+    }
+    return stopCount;
+  };
+  // ===== /INTRADAY-STOP-BREAKER =====
+
   const getHoldDays = (c) => {
     return (c.grade === '강매')          ? 5
          : (c.grade === '급등')          ? 2
@@ -1900,7 +1940,17 @@ const run = async function () {
     }
   };
 
+  const todayStopCount = await countTodayStopOuts(today);
+  const intradayStopBreakerTripped = todayStopCount >= INTRADAY_STOP_THRESH;
+  if (intradayStopBreakerTripped) {
+    logger.info('Intraday stop-loss circuit breaker tripped — suppressing new sends today', {
+      todayStopCount, threshold: INTRADAY_STOP_THRESH,
+    }, requestId);
+  }
+
   for (let i = 0; i < selected.length; i++) {
+    // [INTRADAY-STOP-BREAKER] 당일 손절 2회 이상 시 신규 발송 억제
+    if (intradayStopBreakerTripped) break;
     // [NODUP-2] send 직전 재확인 — 동시 실행 레이스 컨디션 최후 방어
     if (store.swingSentToday[today] && store.swingSentToday[today].includes(selected[i].code)) continue;
     const res = await send(selected[i]);
