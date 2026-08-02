@@ -123,12 +123,12 @@ constraint is still `cagr_15slot`, not frequency, in the sense that even among t
 clear frequency, none is profitable — but frequency is no longer a free pass the way it was for
 A/C/D.
 
-Both the grid-best and grid-worst cagr cells happen to fall outside that 29-cell frequency-passing
+The grid-best and grid-worst cagr cells fall on opposite sides of that 29-cell frequency-passing
 subset: the best cell is `target_pct=8%, stop_pct=4%, min_score=60, regime_gate=True` —
 `n_trades=406, hit_rate=26.60%, avg_pnl=-0.23%, cagr_15slot=-1.11%, mdd_15slot=-14.73%,
-trades_per_week=3.12` (below 5). The worst cell is `target_pct=5%, stop_pct=3%, min_score=60,
-regime_gate=False` — `n_trades=745, hit_rate=29.80%, cagr_15slot=-12.29%, mdd_15slot=-30.53%,
-trades_per_week=5.72` (above 5).
+trades_per_week=3.12` (below 5, outside the subset). The worst cell is `target_pct=5%, stop_pct=3%,
+min_score=60, regime_gate=False` — `n_trades=745, hit_rate=29.80%, cagr_15slot=-12.29%,
+mdd_15slot=-30.53%, trades_per_week=5.72` (above 5, inside the subset).
 
 A trader's honest read: the familiar tight-target/wide-stop-vs-wide-target/tight-stop trade-off
 recurs a fourth time, but B지지선's grid is meaningfully shallower than the other three — its
@@ -292,11 +292,11 @@ comes from a differently-selected portfolio of trades, not from partitioning one
 into components. What can be said, properly caveated: B지지선 in isolation does not look like an
 obviously weaker pattern than A눌림목, C촉매, or D박스 — if anything, on this train-side comparison
 it looks like the mildest loss of the four — but it is not, on these numbers, a candidate for
-isolated deployment or for retuning either. It is comprehensively unprofitable at 187 of its 216
-grid cells (the 29 that clear frequency, plus every cell examined for cagr regardless of
-frequency, are all negative), consistent with every other pattern examined in this research line,
-and its test-side cagr deterioration (present, though smaller in magnitude than C촉매's or D박스's)
-is not a reassuring sign for an already-negative result.
+isolated deployment or for retuning either. It is comprehensively unprofitable at 216 of its 216
+grid cells (`cells_cagr_positive_train` is 0 in `backtest_pattern_b_grid_results.json`'s summary —
+every cell is cagr-negative, not just the 29 that clear frequency), consistent with every other
+pattern examined in this research line, and its test-side cagr deterioration (present, though
+smaller in magnitude than C촉매's or D박스's) is not a reassuring sign for an already-negative result.
 
 ## 6. What Remains Open
 
