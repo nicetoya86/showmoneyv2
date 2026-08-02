@@ -10,9 +10,9 @@ import pandas as pd
 import requests
 
 from .dart_history import fetch_disclosures_for_date
-from .indicators import max_drawdown
+from .indicators import atr as calc_atr, max_drawdown
 from .krx_supply_history import fetch_supply_for_date
-from .simulate_exits import simulate_exit
+from .simulate_exits import simulate_exit, simulate_exit_partial
 from .toss_liveprice import apply_toss_liveprice
 from .transaction_costs import apply_round_trip_cost
 from .swing_signal_engine import SwingCandidate, evaluate_candidate
@@ -63,6 +63,7 @@ def backtest_swing_v2(
     start: str,
     end: str,
     dart_api_key: str = DART_API_KEY,
+    exit_model: str = "binary",
 ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     per_ticker: Dict[str, pd.DataFrame] = {}
     skipped_tickers: List[Dict[str, str]] = []
@@ -128,10 +129,23 @@ def backtest_swing_v2(
                     "date": day.isoformat(), "ticker": ticker, "code": code, "reason": toss.status,
                 })
                 continue
-            sim = simulate_exit(
-                df, entry_idx,
-                entry=toss.entry, stop=toss.stop, target=toss.target, hold_days=cand.hold_days,
-            )
+            if exit_model == "partial":
+                high_arr = df["high"].to_numpy(dtype="float64")
+                low_arr = df["low"].to_numpy(dtype="float64")
+                close_arr = df["close"].to_numpy(dtype="float64")
+                atr_abs = calc_atr(high_arr, low_arr, close_arr, 14)[idx - 1] if idx >= 1 else float("nan")
+                if not np.isfinite(atr_abs) or atr_abs <= 0:
+                    atr_abs = float(np.nanmean(high_arr[max(0, idx - 14):idx] - low_arr[max(0, idx - 14):idx]))
+                atr_pct = atr_abs / toss.entry if toss.entry > 0 else 0.0
+                sim = simulate_exit_partial(
+                    df, entry_idx,
+                    entry=toss.entry, stop=toss.stop, atr_pct=atr_pct, hold_days=cand.hold_days,
+                )
+            else:
+                sim = simulate_exit(
+                    df, entry_idx,
+                    entry=toss.entry, stop=toss.stop, target=toss.target, hold_days=cand.hold_days,
+                )
             gross_pnl = (float(sim["exit_price"]) - toss.entry) / toss.entry
             pnl = apply_round_trip_cost(gross_pnl)
             trades.append({
@@ -142,6 +156,7 @@ def backtest_swing_v2(
                 "exit_price": float(sim["exit_price"]), "result": sim["result"],
                 "days_held": sim["days_held"], "pnl": pnl,
                 "gross_pnl": gross_pnl, "toss_status": toss.status,
+                **({"tranches": sim["tranches"]} if "tranches" in sim else {}),
             })
 
     df_trades = pd.DataFrame(trades)
@@ -181,13 +196,19 @@ def main() -> None:
     ap.add_argument("--start", default="2024-01-01")
     ap.add_argument("--end", default="2026-01-01")
     ap.add_argument("--out", default="backtest_out_swing_v2.json")
+    ap.add_argument("--exit-model", default="binary", choices=["binary", "partial"])
     args = ap.parse_args()
 
     tickers = _load_tickers(Path(args.tickers))
-    df_trades, stats = backtest_swing_v2(tickers, start=args.start, end=args.end)
+    df_trades, stats = backtest_swing_v2(
+        tickers, start=args.start, end=args.end, exit_model=args.exit_model,
+    )
 
     out = {
-        "params": {"start": args.start, "end": args.end, "tickers": len(tickers)},
+        "params": {
+            "start": args.start, "end": args.end, "tickers": len(tickers),
+            "exit_model": args.exit_model,
+        },
         "stats": stats,
         "trades": df_trades.to_dict(orient="records") if not df_trades.empty else [],
     }
