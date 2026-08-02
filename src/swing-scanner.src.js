@@ -1409,6 +1409,13 @@ const run = async function () {
         const isShortTrade = !isStrong && !isSurge && isPatternC && rvolVal >= 5.0;
         const grade = isStrong ? '강매' : isSurge ? '급등' : isShortTrade ? '매도차익' : '매수';
 
+        // ---- [REGIME-FIX] 시장 단계별 진입 차단 (2026-05-02 도입분 복원) ----
+        const rg = await getMarketRegime(store, today);
+        const regimeLevel = rg?.regimeLevel ?? 0;
+        const riskOn = regimeLevel < 2;
+        if (regimeLevel >= 2 && grade !== '강매') return; // 약세장: 강매 전용
+        if (regimeLevel >= 1 && grade === '매도차익') return; // 중립장: 매도차익 차단
+
         // ---- [T] 목표가·손절가 ----
         const atrAbs = calcAtrAbs(highD, lowD, dIdx, 14);
         const atrPct = atrAbs / currentPrice;
@@ -1449,7 +1456,7 @@ const run = async function () {
           entry: currentPrice, target, target1, stop,
           score, signals, dailyChange, currentPrice, prevClose,
           timeStr: timeStrNow, type: '스윙',
-          rankScore, atrAbs, rvolVal, riskOn: true, grade,
+          rankScore, atrAbs, rvolVal, riskOn, grade,
           patternType: isPatternC ? 'C촉매' : isPatternA ? 'A눌림목' : isPatternB ? 'B지지선' : 'D박스',
           isETF: false,
         });
