@@ -29,7 +29,8 @@ already-committed pooled candidate cache down to `pattern_type == "D박스"` and
 module's existing, unmodified `run_one_config`/`select_best_config` against the filtered subset.
 
 The filter step produced `backtest_pattern_d_candidates.json`: **4,557 candidates**, confirmed
-directly from the file (`len(candidates['candidates']) == 4557`).
+directly from the file (`len(candidates['candidates']) == 4557`), split `hold_days=5` (3,710) /
+`hold_days=4` (847) — also confirmed directly from the file.
 
 The grid re-run produced `backtest_pattern_d_grid_results.json`, a **216-cell grid**
 (`train_results` has exactly 216 entries, confirmed directly) over:
@@ -79,9 +80,10 @@ regime_gate=False` — `n_trades=1138, hit_rate=32.16%, cagr_15slot=-24.67%, mdd
 A trader's honest read: the now-familiar shape recurs a third time — tight-target/wide-stop cells
 buy a moderate hit rate but bleed cagr, wide-target/tight-stop cells preserve cagr somewhat (still
 deeply negative) but collapse hit_rate into single digits. There is no cell anywhere in this grid
-where both move in the trader's favor at once. D박스's grid-best cagr cell (-6.43%) is essentially
-tied with A눌림목's grid-best cagr cell (-6.28%, per 7a) and clearly better than C촉매's
-(-10.36%, per 7b) — see §5 for the full cross-pattern comparison.
+where both move in the trader's favor at once. D박스's grid-best cagr cell (-6.43%) is close to,
+but marginally behind, A눌림목's grid-best cagr cell (-6.28%, per 7a — a narrow 0.15pp gap in
+A눌림목's favor), and clearly better than C촉매's (-10.36%, per 7b) — see §5 for the full
+cross-pattern comparison.
 
 ## 3. Selected Configuration: Train vs. Test
 
@@ -191,16 +193,17 @@ Test-side, for reference (no pooled test-side figure exists to compare against, 
 above): A눌림목 `hit_rate=54.33%, cagr_15slot=-12.61%`; C촉매 `hit_rate=44.25%,
 cagr_15slot=-31.50%`; D박스 `hit_rate=45.72%, cagr_15slot=-23.34%`.
 
-**Honest trader-perspective read**: on train-side numbers, D박스 in isolation looks like the
-*least bad* of the three isolated patterns on cagr — its grid-best cagr cell (-6.43%) edges out
-A눌림목's (-6.28%) very slightly (a 0.15pp gap, within noise) and is clearly better than C촉매's
-(-10.36%); its selected-config train cagr (-19.29%) is the best of the three selected-config
-figures, beating both A눌림목's (-21.22%, a ~1.93pp gap) and C촉매's (-25.56%, a ~6.27pp gap). D박스
-also has the least-bad grid-worst cell (-24.67%, vs. -28.90% for A눌림목 and -25.94% for C촉매). On
-hit_rate, though, D박스's selected-config train figure (45.68%) is the *lowest* of the three,
-sitting below C촉매's (46.23%) and further below A눌림목's (49.34%) — so D박스 buys its better cagr
-with a slightly worse hit_rate, the same target/stop trade-off seen within every single grid in
-this line, just playing out differently across patterns.
+**Honest trader-perspective read**: on train-side numbers, D박스 in isolation is not the clear best
+of the three isolated patterns on grid-max cagr — its grid-best cagr cell (-6.43%) is marginally
+*behind* A눌림목's (-6.28%, a narrow 0.15pp gap, within noise, so A눌림목's grid-max is the better of
+the two) though still clearly ahead of C촉매's (-10.36%). Where D박스 does come out ahead of both is
+on the *selected*-configuration cagr: its selected-config train cagr (-19.29%) is the best of the
+three selected-config figures, beating both A눌림목's (-21.22%, a ~1.93pp gap) and C촉매's (-25.56%,
+a ~6.27pp gap). D박스 also has the least-bad grid-worst cell (-24.67%, vs. -28.90% for A눌림목 and
+-25.94% for C촉매). On hit_rate, though, D박스's selected-config train figure (45.68%) is the
+*lowest* of the three, sitting below C촉매's (46.23%) and further below A눌림목's (49.34%) — so
+D박스 buys its better selected-config cagr with a slightly worse hit_rate, the same target/stop
+trade-off seen within every single grid in this line, just playing out differently across patterns.
 
 The out-of-sample picture complicates a simple ranking further: A눌림목's test numbers improved on
 its own train numbers (7a's §3), C촉매's test numbers were worse than its own train numbers on cagr
@@ -282,9 +285,11 @@ cells reach `hit_rate >= 90%`, 0/216 cells are even profitable on train, and the
 configuration is a reliable-but-losing -19.29%/-23.34% (train/test) `cagr_15slot`. There is nothing
 here that argues for retuning D박스's target/stop/min_score/regime-gate parameters in production.
 
-What this sub-project *does* establish: D박스 in isolation has the mildest train-side cagr loss of
-the three patterns examined in this research line (7a, 7b, this sub-project) — its grid-best and
-selected-config cagr figures both edge out A눌림목's and C촉매's — but its test-side result
+What this sub-project *does* establish: D박스 in isolation has the mildest train-side
+*selected-config* cagr loss of the three patterns examined in this research line (7a, 7b, this
+sub-project) — its selected-config cagr edges out both A눌림목's and C촉매's, though its grid-best
+cagr cell sits marginally behind A눌림목's (-6.43% vs. -6.28%, within noise) while still ahead of
+C촉매's — but its test-side result
 deteriorates on cagr the same direction as C촉매's (though by a smaller margin), and its hit_rate is
 the lowest of the three on the selected configuration. This is a directional read, not a precise
 ranking, given the slot-competition caveat that makes any cross-run comparison an imperfect one.
