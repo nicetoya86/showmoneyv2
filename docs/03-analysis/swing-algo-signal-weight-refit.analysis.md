@@ -42,6 +42,23 @@ exit-model uncertainties into one regression.
 other sub-project in this line, each trade record now carrying an `aux_features` dict captured
 at candidate-generation time.
 
+**Disclosure — this dataset is not byte-identical to the pre-existing baseline**: this sub-project's
+dataset diverges slightly from `backtest_out_swing_v2_realistic.json` (the baseline most other
+analysis docs in this research line cite). Diffing the two committed JSON files' trades (keyed by
+ticker+date) directly confirms 10 of 2,686 trade records (0.37%), across 7 tickers, differ: four
+records show a same-ticker/date `score` change (299030.KQ 2022-01-13, 103590.KS 2022-04-07,
+025980.KQ 2022-11-08, 074600.KQ 2025-07-28), one is a ticker-substitution on 2022-11-08 (baseline
+has 045390.KQ, this run has 357880.KQ), and 123010.KQ appears 4 times with an exact 2.000x
+`exit_price` scaling (a stock-split-adjustment signature). `trades` (2,686) and `win_rate`
+(32.17%) match the baseline exactly; only `avg_pnl` shows a small difference (-0.004807 here vs.
+-0.004779 in the baseline, ~0.6% relative). Root cause: the Yahoo cache (`cache/yahoo/`) was
+refreshed one day after the baseline was generated, changing the underlying historical
+price/volume data for a handful of tickers — confirmed by re-running the pre-task scoring logic
+against both the old and new cache states (which reproduces each run's own values and not the
+other's), not by cache file timestamps alone, which turned out not to be discriminating (the
+entire cache directory shares one refresh timestamp regardless of which tickers actually changed
+data). This is external data-source drift, not a code regression.
+
 **Train/test split**: train = 2022-01-01..2024-06-30 (1,657 trades), test = 2024-07-01..2026-01-01
 (1,029 trades) — the same convention used throughout this research line. Verified directly against
 the committed dataset: filtering `backtest_out_swing_v2_with_features.json`'s trades by `date` into
@@ -199,17 +216,18 @@ signals), six (`rvol_tier`, `obv_trend`, `macd_state`, `intraday_tier`, `sma_ali
 show directional patterns that contradict production's hand-tuned assumption, and one more
 (`high52_tier`) is contradicted at its most-rewarded tier while its lesser tier is consistent. Only
 `rsi_golden` is cleanly consistent across the board. That is a striking, uncomfortable finding given
-how much of the total scoring formula these auxiliary weights constitute (up to roughly a third of
-a typical qualifying candidate's total score, on top of the 40-60 point pattern base weight) — and
-it should be said plainly rather than softened.
+how much of the total scoring formula these auxiliary weights constitute — roughly half of a
+typical qualifying candidate's total score (median ≈47%, mean ≈49%, up to 75% for some candidates;
+computed directly per-trade from `backtest_out_swing_v2_with_features.json`'s `aux_features` and
+`score` fields, using production's own point schedule), on top of the 40-60 point pattern base
+weight — and it should be said plainly rather than softened.
 
 At the same time, this is **not** proof that any single auxiliary signal actively hurts trade
 selection. Test AUC of 0.5284 means this model, taken as a whole, barely distinguishes winning
 trades from losing ones — a coin flip with slightly better-than-even odds. A model this weak cannot
 license a confident claim like "OBV is proven backwards" or "golden cross is proven harmful"; it can
 only license the weaker, but still real, claim that **no evidence in this dataset supports the
-current point values as currently assigned**, and that several of them point the wrong way more
-often than chance alone would predict across eight independent features. Given every prior
+current point values as currently assigned**, and that several of them point the wrong way. Given every prior
 sub-project in this research line has already found the pattern base weights, target/stop
 parameters, and even a 90%-hit-rate-oriented reweighting all fail to produce a validated edge (see
 the MEMORY.md history of sub-projects 4/5/5b/7a-9), this result is consistent with, not contradictory
