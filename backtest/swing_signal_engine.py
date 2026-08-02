@@ -14,7 +14,7 @@ called. This engine matches CURRENT production behavior (regime-blind).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -56,6 +56,7 @@ class SwingCandidate:
     stop: float
     hold_days: int
     signals: List[str]
+    aux_features: Dict[str, object] = field(default_factory=dict)
 
 
 def _hold_days(grade: str, pattern_type: str) -> int:
@@ -189,79 +190,126 @@ def evaluate_candidate(
         score += 10
         signals.append("복합C+D")
 
+    aux_features: Dict[str, object] = {}
+
     if rvol >= 8.0:
         score += 25
         signals.append("거래량8x+")
+        aux_features["rvol_tier"] = 4
     elif rvol >= 5.0:
         score += 18
         signals.append("거래량5x")
+        aux_features["rvol_tier"] = 3
     elif rvol >= 3.0:
         score += 12
         signals.append("거래량3x")
+        aux_features["rvol_tier"] = 2
     elif rvol >= 2.0:
         score += 6
         signals.append("거래량2x")
+        aux_features["rvol_tier"] = 1
+    else:
+        aux_features["rvol_tier"] = 0
 
     if obv_result["obvTrend"] == 1:
         score += 20
         signals.append("OBV수급↑")
+        aux_features["obv_trend"] = 1
     elif obv_result["obvTrend"] == -1:
         score -= 8
+        aux_features["obv_trend"] = -1
+    else:
+        aux_features["obv_trend"] = 0
 
     if macd_result["goldenCross"]:
         score += 15
         signals.append("MACD골든크로스")
+        aux_features["macd_state"] = "golden_cross"
     elif np.isfinite(macd_result["hist"]) and macd_result["hist"] > 0:
         if np.isfinite(macd_result["histPrev"]) and macd_result["hist"] > macd_result["histPrev"]:
             score += 10
             signals.append("MACD↑")
+            aux_features["macd_state"] = "macd_up"
+        else:
+            aux_features["macd_state"] = "neutral"
     elif (
         np.isfinite(macd_result["hist"]) and np.isfinite(macd_result["histPrev"])
         and macd_result["hist"] < 0 and macd_result["histPrev"] < 0 and not is_c
     ):
         return None
+    else:
+        aux_features["macd_state"] = "neutral"
 
     if sma20[idx] > sma60[idx]:
         score += 15
         signals.append("일봉정배열")
+        aux_features["sma_aligned"] = True
+    else:
+        aux_features["sma_aligned"] = False
+
     if intraday_strength >= 0.7:
         score += 12
         signals.append("장마감강세")
+        aux_features["intraday_tier"] = 2
     elif intraday_strength >= 0.5:
         score += 6
         signals.append("장마감양호")
+        aux_features["intraday_tier"] = 1
+    else:
+        aux_features["intraday_tier"] = 0
 
     frgn, org = supply.get("frgn", 0), supply.get("org", 0)
     if frgn > 500_000_000 and org > 500_000_000:
         score += 20
         signals.append("외국인+기관동반")
+        aux_features["supply_tier"] = 3
     elif frgn > 500_000_000:
         score += 12
         signals.append("외국인순매수")
+        aux_features["supply_tier"] = 2
     elif org > 500_000_000:
         score += 8
         signals.append("기관순매수")
+        aux_features["supply_tier"] = 1
+    else:
+        aux_features["supply_tier"] = 0
 
     if dart_items:
         if _re.search(POSITIVE_DART_RE, " ".join(dart_items)):
             score += 20
             signals.append("긍정공시")
+            aux_features["dart_tier"] = 2
         else:
             score += 5
             signals.append("당일공시")
+            aux_features["dart_tier"] = 1
+    else:
+        aux_features["dart_tier"] = 0
 
     if np.isfinite(rsi14_val) and 50 <= rsi14_val <= 70:
         score += 8
         signals.append("RSI골든존")
+        aux_features["rsi_golden"] = True
+    else:
+        aux_features["rsi_golden"] = False
+
     if np.isfinite(adx_result["adx"]) and adx_result["adx"] >= 20 and adx_result["plusDI"] > adx_result["minusDI"]:
         score += 10
         signals.append("ADX추세↑")
+        aux_features["adx_trend"] = True
+    else:
+        aux_features["adx_trend"] = False
+
     if current_price >= high252:
         score += 25
         signals.append("52주신고가")
+        aux_features["high52_tier"] = 2
     elif high252 > 0 and current_price / high252 >= 0.95:
         score += 10
         signals.append("신고가근접")
+        aux_features["high52_tier"] = 1
+    else:
+        aux_features["high52_tier"] = 0
 
     if score < MIN_SCORE_FINAL:
         return None
@@ -316,4 +364,5 @@ def evaluate_candidate(
         stop=stop,
         hold_days=_hold_days(grade, pattern_type),
         signals=signals,
+        aux_features=aux_features,
     )
