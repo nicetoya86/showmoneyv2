@@ -244,6 +244,13 @@ pooled contribution. With 7a/7b/7c complete, the per-pattern isolated-verificati
 closed; B지지선 and any true decomposition of the pooled system's result remain open questions this
 plan does not attempt to close.
 
+> **Correction (2026-08-02, sub-project 9)**: the "superseded by E반등... by design, not by
+> oversight" framing above is factually wrong. `isPatternB` (B지지선) remained live and unchanged
+> in `src/swing-scanner.src.js` throughout; E반등 never shipped to production. B지지선 has since
+> been individually verified: see `docs/03-analysis/swing-algo-pattern-b-verification.analysis.md`.
+> All four patterns (A/B/C/D) now have isolated-verification data on record; this still does not
+> decompose the pooled result.
+
 ## 7. Limitations
 
 - **Single train/test split**, same acknowledged limitation as every prior sub-project in this
@@ -273,6 +280,8 @@ plan does not attempt to close.
   and B지지선's own pooled contribution is not currently scheduled to be measured by any planned
   sub-project. This sub-project, combined with 7a and 7b, does not constitute a decomposition of
   the pooled system — it completes individual isolated verification for A/C/D only.
+  **Correction (2026-08-02, sub-project 9)**: the "superseded"/"not currently scheduled" framing
+  is wrong — see the correction note in §6; B지지선 has since been individually verified.
 
 ## 8. Final Recommendation
 
@@ -311,6 +320,13 @@ the *pooled* system's result (as opposed to the isolated per-pattern profiles no
 A/C/D) would require a dedicated new sub-project this plan does not attempt — 7a, 7b, and this
 document should not be read as having decomposed the pooled A+B+C+D result, only as having each
 individually verified one pattern's own isolated profile.
+
+> **Correction (2026-08-02, sub-project 9)**: "B지지선 remains ... by design (superseded by E반등
+> ... not overlooked), and is not currently scheduled" above is wrong and stale on every count.
+> `isPatternB` remained live in `src/swing-scanner.src.js` throughout; E반등 never shipped to
+> production; B지지선 has since been individually verified — see
+> `docs/03-analysis/swing-algo-pattern-b-verification.analysis.md`. All four patterns (A/B/C/D)
+> now have isolated-verification data on record for the first time in this research line.
 
 ---
 

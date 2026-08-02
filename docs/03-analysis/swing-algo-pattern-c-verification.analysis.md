@@ -224,6 +224,11 @@ superseded in this research line by a purpose-built replacement pattern (E반등
 sub-project 4), and that sub-project verified E반등 using its own separate candidate generator — it
 never touched B지지선 or B지지선's own share of the pooled candidate set.
 
+> **Correction (2026-08-02, sub-project 9)**: "B지지선 was superseded" above is factually wrong —
+> `isPatternB` remained live in `src/swing-scanner.src.js` throughout; E반등 never shipped to
+> production. B지지선 has since been individually verified in isolation: see
+> `docs/03-analysis/swing-algo-pattern-b-verification.analysis.md`.
+
 D박스 (sub-project 7c) still remains to be verified. Until it lands, no conclusion should be drawn
 about a full four-pattern decomposition of the pooled A+B+C+D result. The patterns now individually
 examined are A눌림목 (7a) and C촉매 (this sub-project) — B지지선 and D박스 remain unmeasured in
@@ -264,7 +269,8 @@ A눌림목 or C촉매 is or isn't responsible for the pooled result's weakness.
   purpose-built replacement pattern (E반등, sub-project 4) that verified E반등, not B지지선 itself.
   This sub-project adds only C촉매's isolated profile to the record — it does not, combined with
   7a, constitute a partial decomposition of the pooled system. D박스 (7c) still remains to be
-  verified.
+  verified. **Correction (2026-08-02, sub-project 9)**: the "superseded" framing is wrong — see
+  the correction note above; B지지선 has since been individually verified, D박스 was verified in 7c.
 
 ## 8. Final Recommendation
 

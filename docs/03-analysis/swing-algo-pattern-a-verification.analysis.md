@@ -266,6 +266,13 @@ different units (raw candidates vs. grid configurations) over different bases (2
   A+B+C+D pooled average down relative to its own weight in the pool, only that A눌림목 does not
   appear to be the primary culprit.
 
+  > **Correction (2026-08-02, sub-project 9)**: the "superseded by E반등" framing above is
+  > factually wrong. `isPatternB` (B지지선) remained live and unchanged in `src/swing-scanner.src.js`
+  > the entire time; E반등/oversold-bounce never shipped to production (every analysis document in
+  > that track states "no production code changed"). B지지선 was simply unverified in isolation, not
+  > deprecated — it has since been verified: see
+  > `docs/03-analysis/swing-algo-pattern-b-verification.analysis.md` §1.
+
 ## 7. Final Recommendation
 
 **No change to A눌림목's current production deployment status is recommended.** No production code
@@ -299,6 +306,13 @@ determine and does not attempt to. C촉매 and D박스 are explicitly deferred t
 and 7c (D박스); B지지선's own contribution is not currently scheduled to be measured by any planned
 sub-project, so 7b/7c should not be read as completing a full four-pattern decomposition of the
 pooled result.
+
+> **Correction (2026-08-02, sub-project 9)**: "B지지선 ... superseded ... not currently scheduled"
+> above is stale/wrong on both counts. E반등 never shipped to production; B지지선 (`isPatternB`)
+> remained live throughout. It has since been individually verified — see
+> `docs/03-analysis/swing-algo-pattern-b-verification.analysis.md`. All four patterns (A/B/C/D)
+> now have isolated-verification data on record; this still does not decompose the pooled result
+> (see that document's own §5/§6 for why).
 
 ---
 
