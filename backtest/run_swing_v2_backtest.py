@@ -130,12 +130,13 @@ def backtest_swing_v2(
                 })
                 continue
             if exit_model == "partial":
+                signal_idx = entry_idx - 1
                 high_arr = df["high"].to_numpy(dtype="float64")
                 low_arr = df["low"].to_numpy(dtype="float64")
                 close_arr = df["close"].to_numpy(dtype="float64")
-                atr_abs = calc_atr(high_arr, low_arr, close_arr, 14)[idx - 1] if idx >= 1 else float("nan")
+                atr_abs = calc_atr(high_arr, low_arr, close_arr, 14)[signal_idx - 1] if signal_idx >= 1 else float("nan")
                 if not np.isfinite(atr_abs) or atr_abs <= 0:
-                    atr_abs = float(np.nanmean(high_arr[max(0, idx - 14):idx] - low_arr[max(0, idx - 14):idx]))
+                    atr_abs = float(np.nanmean(high_arr[max(0, signal_idx - 14):signal_idx] - low_arr[max(0, signal_idx - 14):signal_idx]))
                 atr_pct = atr_abs / toss.entry if toss.entry > 0 else 0.0
                 sim = simulate_exit_partial(
                     df, entry_idx,
