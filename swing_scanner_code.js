@@ -105,6 +105,7 @@ const run = async function () {
   const MAX_STOCK_PER_SEND   = 3;    // 1회 최대 발송 종목 수
   const MAX_WEEKLY_SENDS     = 15;   // 주간 최대 추천 건수 (일 3건 × 5일 기준)
   const INTRADAY_STOP_THRESH = 2;    // 당일 손절 카운터: 2회 이상 손절 시 당일 신규 발송 억제
+  const MAX_SCAN_RUNTIME_MS = 20 * 60 * 1000; // 실행 중 락 최대 유지 시간(비정상 종료 시 락 고착 방지용 자동 해제)
   // getMarketRegime 함수용 상수 (초기화 — 새 조건에서 regime 사용 시 재정의)
   const REGIME_SMA_FAST    = 5;
   const REGIME_YEST_DOWN   = -0.015;
@@ -662,9 +663,16 @@ const run = async function () {
   store.swingMeta.lastRunAt = now.toISOString();
   store.swingMeta.lastRunDate = today;
 
-  if (store.swingMeta._lastFullFinish && (Date.now() - store.swingMeta._lastFullFinish) < 90000) {
-    return [{ json: { skipped: true, reason: 'Queue backed up - fast drain' } }];
+  // [NODUP-3] 실행 중 락 — 이전 스캔이 아직 끝나지 않았으면 새 트리거를 스킵한다.
+  // 근본 원인: 1분 간격 cron인데 실제 스캔은 Naver rate-limit 때문에 수 분~9분+ 걸려
+  // 겹쳐 실행되고, 그 사이 동일 종목이 두 실행에서 각각 발송돼 중복 알림이 발생했다.
+  // 기존 _lastFullFinish(완료 후 90초 차단)는 "실행 중"이 아니라 "완료 시각"만 봐서
+  // 진행 중인 겹침 실행을 막지 못했다. _runningSince로 진행 중 여부를 직접 추적하고,
+  // MAX_SCAN_RUNTIME_MS를 넘기면 락이 고착된 것으로 보고 자동 해제한다.
+  if (store.swingMeta._runningSince && (Date.now() - store.swingMeta._runningSince) < MAX_SCAN_RUNTIME_MS) {
+    return [{ json: { skipped: true, reason: 'Previous scan still running' } }];
   }
+  store.swingMeta._runningSince = Date.now();
 
   if (!store.swingSent) store.swingSent = {};
   if (!store.weeklyRecommendations) store.weeklyRecommendations = {};
@@ -1564,7 +1572,7 @@ const run = async function () {
   }
 
   // 스캔 완료 후 per-stock 캐시 제거 (1,500종목 × ~20KB = ~30MB 메모리 누적 방지)
-  // _lastFullFinish 가드로 재실행이 차단되므로 캐시 재사용 가능성 없음
+  // _runningSince 락으로 겹침 실행이 차단되므로 캐시 재사용 가능성 없음
   if (store.naverCache) store.naverCache.daily = {};
 
   // ===== 에러/경고 알림 =====
@@ -2062,6 +2070,7 @@ const run = async function () {
   // ===== /TOSS-RISK =====
 
   store.swingMeta._lastFullFinish = Date.now();
+  store.swingMeta._runningSince = null; // [NODUP-3] 락 해제 — 다음 트리거부터 재실행 허용
 
   // Log scan completion
   logger.info('Swing scanner completed', {
