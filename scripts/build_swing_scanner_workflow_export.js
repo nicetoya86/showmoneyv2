@@ -25,7 +25,7 @@ const now = new Date();
 const ts = now.getFullYear().toString()
   + String(now.getMonth() + 1).padStart(2, '0')
   + String(now.getDate()).padStart(2, '0');
-const OUT_NAME = `workflow_FINAL_${ts}_regime_gate_score_tier_intraday_breaker.json`;
+const OUT_NAME = `workflow_FINAL_${ts}_scan_interval_fix.json`;
 const OUTPUT = path.join(ROOT, OUT_NAME);
 const ARCHIVE = path.join(ROOT, 'backups', 'workflow-history', OUT_NAME);
 

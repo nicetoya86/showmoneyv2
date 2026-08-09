@@ -669,6 +669,12 @@ const run = async function () {
   // 기존 _lastFullFinish(완료 후 90초 차단)는 "실행 중"이 아니라 "완료 시각"만 봐서
   // 진행 중인 겹침 실행을 막지 못했다. _runningSince로 진행 중 여부를 직접 추적하고,
   // MAX_SCAN_RUNTIME_MS를 넘기면 락이 고착된 것으로 보고 자동 해제한다.
+  //
+  // [NODUP-3-FIX] 락 해제는 반드시 이 함수의 모든 return 경로에서 이루어져야 한다 —
+  // 락 획득(아래) 이후에도 위클리 한도/KRX 유니버스 로드 실패/오늘 히트 없음 등 정상적인
+  // 조기 종료 경로가 있는데, 그 경로들이 락을 풀지 않으면 다음 트리거가 최대
+  // MAX_SCAN_RUNTIME_MS(20분)까지 "Previous scan still running"으로 계속 막히고,
+  // _lastFullFinish도 갱신되지 않아 Backup Watchdog이 "정상 실행 안 됨"으로 오탐한다.
   if (store.swingMeta._runningSince && (Date.now() - store.swingMeta._runningSince) < MAX_SCAN_RUNTIME_MS) {
     return [{ json: { skipped: true, reason: 'Previous scan still running' } }];
   }
@@ -1119,6 +1125,7 @@ const run = async function () {
     try {
       await telegram.send(msg);
     } catch (e) {}
+    store.swingMeta._runningSince = null; // [NODUP-3-FIX] 조기 종료 경로도 락 해제
     return [{ json: { error: 'Failed to load KRX universe' } }];
   }
 
@@ -1641,6 +1648,7 @@ const run = async function () {
     (sum, dt) => sum + ((store.weeklyRecommendations[dt] || []).length), 0
   );
   if (thisWeekCount >= MAX_WEEKLY_SENDS) {
+    store.swingMeta._runningSince = null; // [NODUP-3-FIX] 조기 종료 경로도 락 해제
     return [{ json: { skipped: true, reason: 'Weekly limit', weeklyCount: thisWeekCount } }];
   }
   const gradeOrder = { '강매': 4, '급등': 3, '매도차익': 2, '매수': 1 };
@@ -2015,7 +2023,10 @@ const run = async function () {
 
   if (selected.length === 0) {
     if (!store.swingAlerts) store.swingAlerts = {};
-    if (store.swingAlerts.noHitDate === today) return [{ json: { skipped: true, reason: 'No hit (already notified today)' } }];
+    if (store.swingAlerts.noHitDate === today) {
+      store.swingMeta._runningSince = null; // [NODUP-3-FIX] 조기 종료 경로도 락 해제
+      return [{ json: { skipped: true, reason: 'No hit (already notified today)' } }];
+    }
     const msg =
       '[스윙 스캔 완료] 추천 종목 없음' + NL +
       '- 분석 종목(필터 후): ' + ALL_TICKERS.length + '개' + NL +
