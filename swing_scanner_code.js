@@ -104,6 +104,14 @@ const run = async function () {
   const STOP_C_MINUTE = 30;           // 패턴C는 11:30 이후 추격 위험
   const MAX_STOCK_PER_SEND   = 3;    // 1회 최대 발송 종목 수
   const MAX_WEEKLY_SENDS     = 15;   // 주간 최대 추천 건수 (일 3건 × 5일 기준)
+
+  // ===== 주간 발송 한도 도달 안내 — 이번 주 최초 도달 시에만 1회 발송 =====
+  // (매 10분 스캔 사이클마다 중복 안내를 막기 위해 store.swingWeeklyCapNotifiedWeek에
+  // 이미 안내한 주의 첫 거래일(월요일 등)을 기록해두고 비교한다.)
+  function shouldSendWeeklyCapNotice(thisWeekKey, lastNotifiedWeek) {
+    return lastNotifiedWeek !== thisWeekKey;
+  }
+
   const INTRADAY_STOP_THRESH = 2;    // 당일 손절 카운터: 2회 이상 손절 시 당일 신규 발송 억제
   const MAX_SCAN_RUNTIME_MS = 20 * 60 * 1000; // 실행 중 락 최대 유지 시간(비정상 종료 시 락 고착 방지용 자동 해제)
   // getMarketRegime 함수용 상수 (초기화 — 새 조건에서 regime 사용 시 재정의)
@@ -1649,6 +1657,14 @@ const run = async function () {
   );
   if (thisWeekCount >= MAX_WEEKLY_SENDS) {
     store.swingMeta._runningSince = null; // [NODUP-3-FIX] 조기 종료 경로도 락 해제
+    const thisWeekKey = thisWeekDates[0];
+    if (shouldSendWeeklyCapNotice(thisWeekKey, store.swingWeeklyCapNotifiedWeek)) {
+      store.swingWeeklyCapNotifiedWeek = thisWeekKey;
+      const noticeMsg = '📊 [주간 발송 한도 도달]' + NL +
+        '이번 주 스윙 추천 ' + MAX_WEEKLY_SENDS + '건 발송 완료 — 신규 추천 종료' + NL +
+        '(다음 주 월요일부터 재개)';
+      try { await telegram.send(noticeMsg); } catch (e) {}
+    }
     return [{ json: { skipped: true, reason: 'Weekly limit', weeklyCount: thisWeekCount } }];
   }
   const gradeOrder = { '강매': 4, '급등': 3, '매도차익': 2, '매수': 1 };
