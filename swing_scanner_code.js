@@ -1659,11 +1659,13 @@ const run = async function () {
     store.swingMeta._runningSince = null; // [NODUP-3-FIX] 조기 종료 경로도 락 해제
     const thisWeekKey = thisWeekDates[0];
     if (shouldSendWeeklyCapNotice(thisWeekKey, store.swingWeeklyCapNotifiedWeek)) {
-      store.swingWeeklyCapNotifiedWeek = thisWeekKey;
       const noticeMsg = '📊 [주간 발송 한도 도달]' + NL +
         '이번 주 스윙 추천 ' + MAX_WEEKLY_SENDS + '건 발송 완료 — 신규 추천 종료' + NL +
         '(다음 주 월요일부터 재개)';
-      try { await telegram.send(noticeMsg); } catch (e) {}
+      try {
+        await telegram.send(noticeMsg);
+        store.swingWeeklyCapNotifiedWeek = thisWeekKey;
+      } catch (e) {}
     }
     return [{ json: { skipped: true, reason: 'Weekly limit', weeklyCount: thisWeekCount } }];
   }

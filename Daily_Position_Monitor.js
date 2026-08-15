@@ -103,6 +103,19 @@ function createNaverClient(http) {
   return { fetchDaily, fetchMinute };
 }
 
+// KRX 휴장일 — 단일 진실공급원 (기존 swing_scanner_code.js / weekly_reporter_code.js에 각각
+// 복붙되어 있던 배열을 통합). Daily_Healthcheck의 HOLIDAYS_2026는 이 목록보다 짧아서
+// '2026-07-17'이 빠져 있었다 — 이 파일로 통합하면서 그 누락도 함께 고친다.
+const HOLIDAYS = ['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-03-01','2025-03-03','2025-05-05','2025-05-06','2025-06-06','2025-08-15','2025-10-03','2025-10-06','2025-10-07','2025-10-08','2025-10-09','2025-12-25','2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-03-01','2026-03-02','2026-05-05','2026-05-24','2026-05-25','2026-06-03','2026-06-06','2026-07-17','2026-08-15','2026-08-17','2026-09-24','2026-09-25','2026-09-26','2026-10-03','2026-10-05','2026-10-09','2026-12-25'];
+
+function isHoliday(dateStr) {
+  return HOLIDAYS.includes(dateStr);
+}
+
+function isWeekend(dow) {
+  return dow === 0 || dow === 6;
+}
+
 
 const BOT  = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
 const CHAT = '523002062';
@@ -128,6 +141,10 @@ const now = new Date();
 const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
 const today = `${kst.getUTCFullYear()}-${String(kst.getUTCMonth() + 1).padStart(2, '0')}-${String(kst.getUTCDate()).padStart(2, '0')}`;
 
+if (isHoliday(today)) {
+  return [{ json: { skipped: true, reason: 'Holiday', today } }];
+}
+
 // ===== 네이버 일봉 데이터 조회 =====
 async function fetchDailyClose(code) {
   const kstNow = new Date(Date.now() + 9 * 3600000);
@@ -144,6 +161,7 @@ async function fetchDailyClose(code) {
     high:  Number(latest.highPrice  || latest.high),
     low:   Number(latest.lowPrice   || latest.low),
     prevClose: prev ? Number(prev.closePrice || prev.close) : null,
+    latestDate: latest.localDate,
   };
 }
 
@@ -193,7 +211,7 @@ for (const dateKey of allDates) {
     const entryDate = new Date(rec.date || dateKey);
     const expiry = new Date(entryDate.getTime() + holdDays * 1.4 * 24 * 60 * 60 * 1000); // 거래일 근사
     if (expiry < now) continue;
-    activePositions.push({ ...rec, dateKey });
+    activePositions.push(rec);
   }
 }
 
@@ -210,7 +228,7 @@ for (const rec of activePositions) {
   const candle = await fetchDailyClose(rec.code);
   if (!candle) continue;
 
-  const { close, high, low, prevClose } = candle;
+  const { close, high, low, prevClose, latestDate } = candle;
   const entry = rec.entry;
   if (!entry || entry <= 0) continue;
 
@@ -241,8 +259,10 @@ for (const rec of activePositions) {
   }
 
   // 급락 경고: 트레일링 스탑 도달 여부와 무관하게, 전일 종가 대비 급락 시 즉시 알림
+  // (오늘 봉이 아직 안 올라온 경우 — 휴장일 지연 등 — 오래된 등락을 오늘 급락으로 오판하지 않도록 가드)
+  const latestDateFormatted = latestDate ? `${latestDate.slice(0,4)}-${latestDate.slice(4,6)}-${latestDate.slice(6,8)}` : null;
   const dayChangePct = computeDayChangePct(close, prevClose);
-  if (dayChangePct !== null && dayChangePct <= SHOCK_DROP_THRESH) {
+  if (latestDateFormatted === today && dayChangePct !== null && dayChangePct <= SHOCK_DROP_THRESH) {
     shockCount++;
     alerts.push(
       '[⚠️ 급락 경고] ' + (rec.name || rec.code) + '(' + rec.code + ')' + NL +

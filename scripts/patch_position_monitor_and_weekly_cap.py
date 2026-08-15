@@ -92,11 +92,14 @@ def main() -> int:
     swing_node["parameters"]["functionCode"] = swing_code
     print(f"Swing Scanner functionCode replaced ({old_len} -> {len(swing_code)} chars)")
 
-    # ===== 2. Daily Position Monitor: 신규 노드 2개 추가 =====
-    if any(n.get("name") == "Daily Position Monitor" for n in nodes):
-        print("Daily Position Monitor node already present - skipping node add (idempotent re-run)")
+    # ===== 2. Daily Position Monitor: 신규 노드 2개 추가 (또는 기존 노드 functionCode 갱신) =====
+    monitor_code = (WORKTREE / "Daily_Position_Monitor.js").read_text(encoding="utf-8")
+    existing_pm_func = next((n for n in nodes if n.get("name") == "Daily Position Monitor"), None)
+    if existing_pm_func is not None:
+        old_len = len(existing_pm_func["parameters"]["functionCode"])
+        existing_pm_func["parameters"]["functionCode"] = monitor_code
+        print(f"Daily Position Monitor functionCode updated ({old_len} -> {len(monitor_code)} chars)")
     else:
-        monitor_code = (WORKTREE / "Daily_Position_Monitor.js").read_text(encoding="utf-8")
         max_y = max((n.get("position", [0, 0])[1] for n in nodes), default=0)
         new_y = max_y + 240
 
