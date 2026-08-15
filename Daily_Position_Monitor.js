@@ -136,12 +136,14 @@ async function fetchDailyClose(code) {
   const sd = sdDate.toISOString().slice(0, 10).replace(/-/g, '') + '000000';
   const items = await naver.fetchDaily(code, sd, ed);
   if (!items) return null;
-  // 오름차순 정렬 기준 마지막 항목이 최신
+  // 오름차순 정렬 기준 마지막 항목이 최신, 그 앞이 전일
   const latest = items[items.length - 1];
+  const prev = items.length >= 2 ? items[items.length - 2] : null;
   return {
     close: Number(latest.closePrice || latest.close),
     high:  Number(latest.highPrice  || latest.high),
     low:   Number(latest.lowPrice   || latest.low),
+    prevClose: prev ? Number(prev.closePrice || prev.close) : null,
   };
 }
 
@@ -170,6 +172,14 @@ function calcTrailingStop(entry, currentHigh, atr, currentGain, existingStop) {
   return Math.max(newStop, existingStop);
 }
 
+// ===== 급락 감지 (트레일링 스탑 도달 여부와 무관하게, 전일 종가 대비 급락 시 즉시 경고) =====
+const SHOCK_DROP_THRESH = -0.05; // 당일 종가가 전일 종가 대비 -5% 이상 하락 시 트리거
+
+function computeDayChangePct(close, prevClose) {
+  if (!prevClose || prevClose <= 0) return null;
+  return (close - prevClose) / prevClose;
+}
+
 // ===== 활성 포지션 수집 =====
 const weeklyRecs = store.weeklyRecommendations || {};
 const allDates = Object.keys(weeklyRecs).sort();
@@ -194,12 +204,13 @@ if (!activePositions.length) {
 // ===== 각 포지션 처리 =====
 const alerts = [];
 let updated = 0;
+let shockCount = 0;
 
 for (const rec of activePositions) {
   const candle = await fetchDailyClose(rec.code);
   if (!candle) continue;
 
-  const { close, high, low } = candle;
+  const { close, high, low, prevClose } = candle;
   const entry = rec.entry;
   if (!entry || entry <= 0) continue;
 
@@ -228,6 +239,18 @@ for (const rec of activePositions) {
       'ATR: ' + to0(atr) + '원'
     );
   }
+
+  // 급락 경고: 트레일링 스탑 도달 여부와 무관하게, 전일 종가 대비 급락 시 즉시 알림
+  const dayChangePct = computeDayChangePct(close, prevClose);
+  if (dayChangePct !== null && dayChangePct <= SHOCK_DROP_THRESH) {
+    shockCount++;
+    alerts.push(
+      '[⚠️ 급락 경고] ' + (rec.name || rec.code) + '(' + rec.code + ')' + NL +
+      '전일종가 대비: ' + pct(dayChangePct) + NL +
+      '현재가: ' + to0(close) + '원 │ 진입가 대비: ' + pct(currentGain) + NL +
+      '시장 변동성 확대 — 포지션 재검토 권장'
+    );
+  }
 }
 
 // ===== Telegram 알림 발송 =====
@@ -248,9 +271,10 @@ return [{
     today,
     activePositions: activePositions.length,
     updated,
+    shockAlerts: shockCount,
     alertsSent: alerts.length,
-    message: updated > 0
-      ? `스탑 상향 ${updated}건 알림 발송`
-      : '스탑 상향 없음 (모든 포지션 정상)',
+    message: (updated > 0 || shockCount > 0)
+      ? `스탑 상향 ${updated}건, 급락 경고 ${shockCount}건 알림 발송`
+      : '스탑 상향/급락 없음 (모든 포지션 정상)',
   }
 }];
