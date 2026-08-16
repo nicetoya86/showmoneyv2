@@ -94,13 +94,29 @@ const run = async function () {
     }
   }
 
-  if (recs.length === 0) {
+  // [CARRYOVER] 지난주 이전 추천 중 보유기간이 이번 주까지 걸쳐있는 종목 별도 수집
+  // (예: 지난주 목요일 추천 + holdingDays=5 → 이번주 초까지 보유 중인 케이스)
+  const carryOverRecs = [];
+  for (const dateKey in store.weeklyRecommendations) {
+    if (dateKey >= weekDates[0]) continue; // 이번 주 이후는 위에서 이미 처리됨
+    const arr = store.weeklyRecommendations[dateKey] || [];
+    for (const r of arr) {
+      if (r.type !== 'swing') continue;
+      const holdDays = r.holdingDays || 3;
+      const exitDate = addTradingDays(dateKey, holdDays);
+      if (exitDate >= weekDates[0]) carryOverRecs.push({ ...r, date: dateKey, carryOver: true });
+    }
+  }
+
+  if (recs.length === 0 && carryOverRecs.length === 0) {
     const msg = '[주간 스윙 리포트]' + NL +
       '📅 ' + weekDates[0] + ' ~ ' + weekDates[weekDates.length - 1] + NL + NL +
       '이번 주 스윙 추천 없음';
     try { await telegram.send(msg); } catch (e) {}
     return [{ json: { sent: true, count: 0 } }];
   }
+
+  const allRecs = recs.concat(carryOverRecs);
 
   // [BUGFIX-2026-07-19] 거래 자체가 없던 날(상한가 잠김 등) 판별 — Naver 일봉 API는
   // 이런 날 open/high/low/volume을 전부 0으로 반환하는데, 이를 그대로 두면
@@ -141,7 +157,7 @@ const run = async function () {
   let losses = 0;
   let notEntered = 0;
 
-  for (const r of recs) {
+  for (const r of allRecs) {
     try {
       const holdDays = r.holdingDays || 3;
       const exitDate = addTradingDays(r.date, holdDays);
@@ -265,8 +281,11 @@ const run = async function () {
   // 섹션별 분류
   const winList = details.filter((d) => d.result === 'win');
   const partialWinList = details.filter((d) => d.result === 'partial_win');
-  const holdList = details.filter((d) => d.result === 'holding' || d.result === 'expired');
   const lossList = details.filter((d) => d.result === 'loss');
+  // [CARRYOVER] 보유 종목은 이번주 신규 추천분과 지난주 이월분을 분리해서 리포트
+  const holdListAll = details.filter((d) => d.result === 'holding' || d.result === 'expired');
+  const holdList = holdListAll.filter((d) => !d.carryOver);
+  const holdListCarry = holdListAll.filter((d) => d.carryOver);
 
   // Log report statistics for QA tracing
   logger.info('Weekly report generated', {
@@ -275,7 +294,7 @@ const run = async function () {
     wins: wins,
     partialWins: partialWins,
     losses: losses,
-    holding: holdList.length,
+    holding: holdListAll.length,
     winRate: (winRate * 100).toFixed(1) + '%',
     enteredCount: enteredCount
   }, requestId);
@@ -283,6 +302,7 @@ const run = async function () {
   // 각 섹션 내 수익률 기준 정렬
   winList.sort((a, b) => (b.maxReturn || 0) - (a.maxReturn || 0));
   holdList.sort((a, b) => (b.maxReturn || 0) - (a.maxReturn || 0));
+  holdListCarry.sort((a, b) => (b.maxReturn || 0) - (a.maxReturn || 0));
   lossList.sort((a, b) => (a.maxReturn || 0) - (b.maxReturn || 0));
 
   // ===== 깨진 종목명 보완: Naver API로 재조회 =====
@@ -318,12 +338,15 @@ const run = async function () {
 
   // HELPER-01: 날짜 단축 (2026-03-25 → 03-25)
   const shortDate = (ds) => (ds && ds.length >= 7) ? ds.slice(5) : (ds || '');
+  // [CARRYOVER] 지난주 이월 종목 표시 태그
+  const carryTag = (d) => d.carryOver ? '[이월] ' : '';
 
   // ===== 메시지 구성 =====
   let msg = '[주간 스윙 성과 리포트]' + NL +
     '📅 ' + weekDates[0] + ' ~ ' + weekDates[weekDates.length - 1] + NL +
     '━━━━━━━━━━━━━━━━━━━━' + NL +
-    '총추천 ' + recs.length + '건 │ 진입 ' + enteredCount + '건 │ 승률 ' + (evaluated.length > 0 ? (winRate * 100).toFixed(0) + '%' : 'N/A') + NL +
+    '총추천 ' + recs.length + '건' + (carryOverRecs.length > 0 ? ' (+이월 ' + carryOverRecs.length + '건)' : '') +
+    ' │ 진입 ' + enteredCount + '건 │ 승률 ' + (evaluated.length > 0 ? (winRate * 100).toFixed(0) + '%' : 'N/A') + NL +
     '✅ 목표 ' + wins + '건 │ 🎯 1차달성 ' + partialWins + '건 │ ❌ 손절 ' + losses + '건 │ 🔄 보유 ' + holdList.length + '건' + NL +
     '━━━━━━━━━━━━━━━━━━━━' + NL;
 
@@ -333,7 +356,7 @@ const run = async function () {
     for (const d of winList) {
       const name = resolveName(d);
       const typeTag = d.isETF === false ? '[단일종목]' : d.isETF ? '[ETF]' : '';
-      let line = typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
+      let line = carryTag(d) + typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
       if (d.hitTargetDay) line += ' │ ' + shortDate(d.hitTargetDay);
       if (d.score) line += ' │ ' + d.score + '점';
@@ -346,7 +369,7 @@ const run = async function () {
     msg += NL + '🎯 1차달성 (' + partialWinList.length + '건)' + NL;
     for (const d of partialWinList) {
       const name = resolveName(d);
-      let line = name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
+      let line = carryTag(d) + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (d.hitTarget1Day) line += ' │ 1차 ' + shortDate(d.hitTarget1Day);
       if (d.hitStopDay) line += ' │ 손절 ' + shortDate(d.hitStopDay);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
@@ -369,13 +392,27 @@ const run = async function () {
     }
   }
 
+  // 📌 이월 보유 종목 — 지난주 이전 추천, 보유기간 때문에 이번 주까지 보유 중
+  if (holdListCarry.length > 0) {
+    msg += NL + '📌 이월 보유 (전주 추천, ' + holdListCarry.length + '건)' + NL;
+    for (const d of holdListCarry) {
+      const name = resolveName(d);
+      let line = name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
+      if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
+      if (d.result === 'holding' && d.exitDate) line += ' │ 예정일 ' + shortDate(d.exitDate);
+      if (d.result === 'expired') line += ' │ 보유예정일 ' + shortDate(d.exitDate || d.date);
+      if (d.score) line += ' │ ' + d.score + '점';
+      msg += line + NL;
+    }
+  }
+
   // ❌ 손절 종목
   if (lossList.length > 0) {
     msg += NL + '❌ 손절 (' + lossList.length + '건)' + NL;
     for (const d of lossList) {
       const name = resolveName(d);
       const typeTag = d.isETF === false ? '[단일종목]' : d.isETF ? '[ETF]' : '';
-      let line = typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
+      let line = carryTag(d) + typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
       if (d.hitStopDay) line += ' │ 손절 ' + shortDate(d.hitStopDay);
       if (d.score) line += ' │ ' + d.score + '점';
@@ -421,7 +458,7 @@ const run = async function () {
     msg += NL + '⚪ 매수 미도달 (' + notEnteredList.length + '건)' + NL;
     for (const d of notEnteredList) {
       const name = resolveName(d);
-      msg += name + '(' + (d.code || '') + ') │ ' + shortDate(d.date) + NL;
+      msg += carryTag(d) + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date) + NL;
     }
   }
 

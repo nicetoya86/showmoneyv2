@@ -703,6 +703,21 @@ const run = async function () {
   if (!store.swingSentToday[today]) store.swingSentToday[today] = [];
   if (!store.weeklyRecommendations[today]) store.weeklyRecommendations[today] = [];
 
+  // [NOREBUY] 이미 보유 중인(만료 안 된) 종목은 재매수 후보에서 제외
+  // — daily-position-monitor.src.js와 동일한 만료 판정(holdingDays*1.4일)을 재사용해
+  //   "보유기간 넘어 다음주까지 들고 있는" 종목도 계속 제외 대상으로 잡는다.
+  const heldCodes = new Set();
+  for (const dateKey in store.weeklyRecommendations) {
+    for (const rec of (store.weeklyRecommendations[dateKey] || [])) {
+      if (rec.type !== 'swing') continue;
+      const holdDays = rec.holdingDays || 3;
+      const entryDate = new Date(rec.date || dateKey);
+      const expiry = new Date(entryDate.getTime() + holdDays * 1.4 * 24 * 60 * 60 * 1000);
+      if (expiry < now) continue;
+      heldCodes.add(String(rec.code));
+    }
+  }
+
   // ===== [TOSS-CONFIRM] 임계값 튜닝용 상세 로그 저장소 (2026-07-14) =====
   // tossConfirm() 평가마다 원본 지표·임계값·API 성공여부까지 기록 — 실거래 운영 중
   // 스킵 사유/비율 분포를 나중에 분석해 TOSS_ASK_BID_BLOCK_RATIO, TOSS_WEAK_BUY_RATIO_C 튜닝
@@ -1327,6 +1342,8 @@ const run = async function () {
         // [NODUP-2] 당일 발송 Set 체크 — 동시 실행 레이스 컨디션 방어
         const _rc = t.replace(/\.(KS|KQ)$/, '');
         if (store.swingSentToday[today] && store.swingSentToday[today].includes(_rc)) { _log.rejected.duplicate++; return; }
+        // [NOREBUY] 이미 보유 중인 종목은 재매수 후보에서 제외
+        if (heldCodes.has(_rc)) { _log.rejected.duplicate++; return; }
 
         const cDaily = await httpDaily(t);
         const errDaily = cDaily?.chart?.error?.description;
