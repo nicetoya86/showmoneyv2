@@ -12,7 +12,6 @@ const run = async function () {
     '리츠','펀드',
   ];
   const DUPLICATE_WINDOW_MINUTES = 480;
-  const PGM_CAUTION_THRESHOLD = -500_000_000_000;
   const DART_API_KEY = '34a9b090d2a7b1ee689a240fef68667d36b389e7';
   const ALERT_START_HOUR   = 9;
   const ALERT_START_MINUTE = 0;
@@ -666,59 +665,12 @@ const run = async function () {
   const riskCacheAt = bl.riskUpdatedAt || null;
   const themeCacheAt = bl.themeUpdatedAt || null;
 
-  // ===== 외국인/기관 순매수 로딩 (KRX MDCSTAT02023, 당일 1회 캐싱) =====
-  let supplyMap = {};
+  // [REMOVED 2026-08-22] 외국인/기관 순매수 + 프로그램 매매 방향 로딩(KRX MDCSTAT02023/05401)을
+  // 여기서 시도했었으나, data.krx.co.kr가 이 서버에서 항상 실패해(라이브 staticData 확인 결과
+  // supplyCache/programCache가 한 번도 채워진 적 없음) 관련 필터·점수보너스·경고문구가 전부
+  // no-op였고, 캐싱 조건도 절대 만족 못 해서 스캔마다(하루 ~15회) 실패할 API를 계속 재호출만
+  // 하고 있었다. 대체 데이터 소스 없이는 복구 불가 판단 — 죽은 코드 제거.
   const supCacheKey = today.replace(/-/g, '');
-  if (store.supplyCache && store.supplyCache.trdDd === supCacheKey) {
-    supplyMap = store.supplyCache.map || {};
-  } else {
-    try {
-      const supBody = `bld=dbms/MDC/STAT/standard/MDCSTAT02023&mktId=ALL&trdDd=${supCacheKey}&share=1&money=1&csvxls_isNo=false`;
-      const supR = await http({
-        method: 'POST',
-        url: 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': 'https://data.krx.co.kr', 'Referer': 'https://data.krx.co.kr/', 'User-Agent': 'Mozilla/5.0' },
-        body: supBody, json: true,
-      });
-      const supRows = (supR && (supR.output || supR.OutBlock_1 || [])) || [];
-      for (const row of supRows) {
-        const sc = String(row.ISU_SRT_CD || '').trim();
-        if (!sc) continue;
-        const frgn = Number(String(row.FRGN_NETBUY_TRDVAL || '0').replace(/,/g, ''));
-        const org  = Number(String(row.ORG_NETBUY_TRDVAL  || '0').replace(/,/g, ''));
-        supplyMap[sc] = { frgn, org };
-      }
-      store.supplyCache = { trdDd: supCacheKey, map: supplyMap };
-    } catch (e) { /* 수급 로딩 실패 → 해당 필터 스킵, 스캔 계속 */ }
-  }
-  // ===== /외국인/기관 순매수 로딩 =====
-
-  // ===== 프로그램 매매 방향 로딩 (KRX MDCSTAT05401, 당일 1회 캐싱) =====
-  let programNetBuy = null;
-  if (store.programCache && store.programCache.trdDd === supCacheKey) {
-    programNetBuy = store.programCache.netBuy;
-  } else {
-    try {
-      const pgmBody = `bld=dbms/MDC/STAT/standard/MDCSTAT05401&trdDd=${supCacheKey}&csvxls_isNo=false`;
-      const pgmR = await http({
-        method: 'POST',
-        url: 'https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'Origin': 'https://data.krx.co.kr', 'User-Agent': 'Mozilla/5.0' },
-        body: pgmBody, json: true,
-      });
-      const pgmRows = (pgmR && (pgmR.output || pgmR.OutBlock_1 || [])) || [];
-      if (pgmRows.length > 0) {
-        const toNum = (v) => Number(String(v || '0').replace(/,/g, ''));
-        const row = pgmRows[0];
-        const totalBuy  = toNum(row.ARBT_BUY_TRDVAL)  + toNum(row.NABT_BUY_TRDVAL);
-        const totalSell = toNum(row.ARBT_SELL_TRDVAL) + toNum(row.NABT_SELL_TRDVAL);
-        programNetBuy = totalBuy - totalSell;
-      }
-      store.programCache = { trdDd: supCacheKey, netBuy: programNetBuy };
-    } catch (e) { /* 프로그램 로딩 실패 → sizeFactor 미변경 */ }
-  }
-  const pgmCaution = (programNetBuy !== null && programNetBuy < PGM_CAUTION_THRESHOLD);
-  // ===== /프로그램 매매 방향 로딩 =====
 
   // ===== 당일 공시 목록 로딩 (DART OpenAPI, 당일 1회 캐싱) =====
   let dartToday = {};
@@ -1311,7 +1263,6 @@ const run = async function () {
         const macdResult = calcMACD(closeD, dIdx);
         const obvResult  = calcOBV(closeD, volD, dIdx);
         const supCode = normalize(getCode(t));
-        const sup = supplyMap[supCode] || {};
         const dartItems = dartToday[supCode] || [];
 
         // ---- [F] 기초 필터 ----
@@ -1319,7 +1270,6 @@ const run = async function () {
         if (rvolVal < 1.0) return;
         if (Number.isFinite(rsi14Val) && rsi14Val < 40) return;
         if (dartItems.length > 0 && /소송|횡령|배임|감사의견|불성실|조회/.test(dartItems.join(' '))) return;
-        if (sup.frgn < -1_000_000_000 || sup.org < -1_000_000_000) return;
 
         // ---- [P] 패턴 감지 변수 ----
         let eventIdx = dIdx;
@@ -1415,10 +1365,6 @@ const run = async function () {
         if (sma20_d[dIdx] > sma60_d[dIdx]) { score += 15; signals.push('일봉정배열'); }
         if      (intradayStrength >= 0.7) { score += 12; signals.push('장마감강세'); }
         else if (intradayStrength >= 0.5) { score +=  6; signals.push('장마감양호'); }
-
-        if      (sup.frgn > 500_000_000 && sup.org > 500_000_000) { score += 20; signals.push('외국인+기관동반'); }
-        else if (sup.frgn > 500_000_000) { score += 12; signals.push('외국인순매수'); }
-        else if (sup.org  > 500_000_000) { score +=  8; signals.push('기관순매수'); }
 
         if (dartItems.length > 0) {
           if (/계약체결|특허|인허가|수주|투자유치|증자/.test(dartItems.join(' '))) {
@@ -1841,7 +1787,6 @@ const run = async function () {
     const target1Line = Number.isFinite(c.target1)
       ? '- 1차 목표: ' + to0(c.target1) + '원 (+' + pct(c.target1 / c.entry - 1) + ')' + NL
       : '';
-    const pgmWarningLine = pgmCaution ? '⚠️ 프로그램 순매도 과다 — 반절매 주의' + NL : '';
     const atrPct = Number.isFinite(c.atrAbs) && c.entry > 0 ? (c.atrAbs / c.entry * 100) : 2.0;
     const trailingPct = Math.max(1.0, Math.min(atrPct, 3.0));
     const holdDays = getHoldDays(c);
@@ -1863,7 +1808,6 @@ const run = async function () {
       '- 손절가: ' + to0(c.stop) + '원 (-' + pct(1 - c.stop / c.entry) + ')' + NL +
       '- 트레일링: +2% 도달시 고점 -' + trailingPct.toFixed(1) + '% 이동' + NL +
       '📊 분할청산: 1차(30%) +2% / 2차(30%) +4% / 잔여(40%) 트레일링' + NL +
-      pgmWarningLine +
       'ATR(14): ' + (Number.isFinite(c.atrAbs) ? (to0(c.atrAbs) + '원') : 'N/A') + NL +
       '- 점수: ' + c.score + '점' + NL +
       tossConfirmLine +
