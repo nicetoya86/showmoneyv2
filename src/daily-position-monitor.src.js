@@ -6,20 +6,12 @@ const { pct, to0 } = require('../lib/format');
 const { createTelegram } = require('../lib/telegramClient');
 const { createNaverClient } = require('../lib/naverClient');
 const { isHoliday } = require('../lib/holidays');
+const { getAtr, calcTrailingStop } = require('../lib/trailingStop');
 
 const BOT  = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
 const CHAT = '523002062';
 
 const NL = '\n';
-
-// ===== 트레일링 스탑 배수 상수 =====
-const TRAIL_BE_GAIN   = 0.03;   // 수익률 3% 이상: 손절→진입가(본전)
-const TRAIL_5_GAIN    = 0.05;   // 수익률 5% 이상: 손절→고점−ATR×1.5
-const TRAIL_10_GAIN   = 0.10;   // 수익률 10% 이상: 손절→고점−ATR×1.0
-const TRAIL_15_GAIN   = 0.15;   // 수익률 15% 이상: 손절→고점−ATR×0.7
-const TRAIL_MULT_5    = 1.5;
-const TRAIL_MULT_10   = 1.0;
-const TRAIL_MULT_15   = 0.7;
 
 const store = this.getWorkflowStaticData('global');
 const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 30000 }, o));
@@ -53,31 +45,6 @@ async function fetchDailyClose(code) {
     prevClose: prev ? Number(prev.closePrice || prev.close) : null,
     latestDate: latest.localDate,
   };
-}
-
-// ===== ATR 계산 (보관된 atrAbs 사용, 없으면 근사치) =====
-function getAtr(rec, currentHigh, currentLow, currentClose) {
-  if (rec.atrAbs && Number.isFinite(rec.atrAbs) && rec.atrAbs > 0) return rec.atrAbs;
-  // atrAbs 없을 때: 현재 고-저 범위로 근사
-  return Math.max(currentHigh - currentLow, currentClose * 0.02);
-}
-
-// ===== 트레일링 스탑 계산 =====
-function calcTrailingStop(entry, currentHigh, atr, currentGain, existingStop) {
-  let newStop = existingStop;
-
-  if (currentGain >= TRAIL_15_GAIN) {
-    newStop = currentHigh - atr * TRAIL_MULT_15;
-  } else if (currentGain >= TRAIL_10_GAIN) {
-    newStop = currentHigh - atr * TRAIL_MULT_10;
-  } else if (currentGain >= TRAIL_5_GAIN) {
-    newStop = currentHigh - atr * TRAIL_MULT_5;
-  } else if (currentGain >= TRAIL_BE_GAIN) {
-    newStop = entry; // 본전 스탑
-  }
-
-  // 스탑은 절대 낮아지지 않음 (트레일링)
-  return Math.max(newStop, existingStop);
 }
 
 // ===== 급락 감지 (트레일링 스탑 도달 여부와 무관하게, 전일 종가 대비 급락 시 즉시 경고) =====
@@ -123,10 +90,14 @@ for (const rec of activePositions) {
   if (!entry || entry <= 0) continue;
 
   const currentGain = (close - entry) / entry;
-  const atr = getAtr(rec, high, low, close);
+  // [A안 2026-08-22] 트레일링 티어 판정은 종가 대신 장중 고가 기준으로 변경.
+  // 종가 기준이면 장중 1차목표(고가 기준) 터치 후 종가가 밀릴 때 본전 스탑이
+  // 전혀 발동하지 않아 초기 손절가(최대 -8%)가 그대로 남는 문제가 있었음.
+  const tierGain = (high - entry) / entry;
+  const atr = getAtr(rec.atrAbs, high, low, close);
   const oldStop = rec.stop || 0;
 
-  const newStop = calcTrailingStop(entry, high, atr, currentGain, oldStop);
+  const newStop = calcTrailingStop(entry, high, atr, tierGain, oldStop);
 
   // 스탑 레벨 의미있게 상승했을 때만 알림 (최소 0.3% 이상 상승)
   const stopRaised = newStop > oldStop * 1.003;

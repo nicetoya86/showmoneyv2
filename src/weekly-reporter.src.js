@@ -2,6 +2,7 @@ const { isHoliday, isWeekend } = require('../lib/holidays');
 const { pct, sleep } = require('../lib/format');
 const { createTelegram } = require('../lib/telegramClient');
 const { createNaverClient } = require('../lib/naverClient');
+const { getAtr, calcTrailingStop } = require('../lib/trailingStop');
 
 const run = async function () {
   const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
@@ -216,6 +217,16 @@ const run = async function () {
       let hitTargetDay = null;
       let hitTarget1Day = null;
       let hitStopDay = null;
+      let stopAtHitDay = null; // hitStopDay 당일 장 시작 시점에 실제로 걸려 있던 stop (분봉 재확인용)
+
+      // [FIX-2026-08-22] 손절일은 "지금 시점의(이미 트레일링으로 올라간) stop"을 과거 저가에
+      // 소급 적용하지 않고, entry일부터 day-by-day로 Daily_Position_Monitor와 동일한 트레일링을
+      // 재현하며 그날그날의 stop과 비교한다 — 그래야 급등 후 반납한 종목이 "랠리 시작 전에 이미
+      // 손절됐다"는 식으로 잘못 앞당겨 판정되지 않는다(target 도달일보다 먼저 찍혀 win이 loss로
+      // 뒤집히는 오분류의 원인이었음). initialStop이 없는 과거 레코드는 현재 stop으로 폴백한다.
+      // 실제 운영에서 트레일링은 "그날 장이 끝난 뒤" 갱신되므로, 그날 저가는 "전날까지 갱신된
+      // stop"과 비교한 다음에(순서 중요) 그날 고가/이득으로 다음날 stop을 갱신해야 한다.
+      let runningStop = (r.initialStop != null ? r.initialStop : r.stop) || 0;
 
       for (const day of relevant) {
         const high = Number(day.highPrice);
@@ -231,8 +242,14 @@ const run = async function () {
         if (!hitTarget1Day && r.target1 && high >= r.target1) {
           hitTarget1Day = day.localDate.slice(0, 4) + '-' + day.localDate.slice(4, 6) + '-' + day.localDate.slice(6, 8);
         }
-        if (!hitStopDay && r.stop && low <= r.stop) {
+        if (!hitStopDay && runningStop > 0 && low <= runningStop) {
           hitStopDay = day.localDate.slice(0, 4) + '-' + day.localDate.slice(4, 6) + '-' + day.localDate.slice(6, 8);
+          stopAtHitDay = runningStop;
+        }
+        if (r.entry > 0 && runningStop > 0) {
+          const tierGain = (high - r.entry) / r.entry;
+          const atr = getAtr(r.atrAbs, high, low, finalClose);
+          runningStop = calcTrailingStop(r.entry, high, atr, tierGain, runningStop);
         }
       }
 
@@ -240,7 +257,7 @@ const run = async function () {
       // partial_win: 1차 목표 달성 후 손절 (이익 실현 일부)
       if (hitTargetDay && hitStopDay && hitTargetDay === hitStopDay) {
         // [BUGFIX-2026-07-19] 같은 날 동시 도달 — 일봉만으로는 선후관계 불명, 분봉으로 재확인
-        const order = await resolveSameDayOrder(r.code, hitTargetDay, r.entry, r.target, r.stop);
+        const order = await resolveSameDayOrder(r.code, hitTargetDay, r.entry, r.target, stopAtHitDay);
         await sleep(300);
         if (order === 'target') result = 'win';
         else if (order === 'stop') result = 'loss';
@@ -257,7 +274,9 @@ const run = async function () {
       const maxReturn = r.entry > 0 ? (maxHigh - r.entry) / r.entry : 0;
       const finalReturn = r.entry > 0 ? (finalClose - r.entry) / r.entry : 0;
       const targetPct = (r.entry > 0 && r.target > 0) ? (r.target / r.entry - 1) : 0;
-      const stopPct = (r.entry > 0 && r.stop > 0) ? (r.stop / r.entry - 1) : 0;
+      // 실제로 손절이 걸렸다면 그 시점의 stop(stopAtHitDay)을, 아니면 현재 stop을 기준으로 한다.
+      const stopForPct = hitStopDay && stopAtHitDay != null ? stopAtHitDay : r.stop;
+      const stopPct = (r.entry > 0 && stopForPct > 0) ? (stopForPct / r.entry - 1) : 0;
 
       if (result === 'win') wins++;
       else if (result === 'partial_win') partialWins++;

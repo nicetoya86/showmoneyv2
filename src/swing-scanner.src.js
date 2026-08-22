@@ -21,14 +21,6 @@ const run = async function () {
   const STOP_C_HOUR = 11;             // 패턴C(촉매) 전용 종료 시각
   const STOP_C_MINUTE = 30;           // 패턴C는 11:30 이후 추격 위험
   const MAX_STOCK_PER_SEND   = 3;    // 1회 최대 발송 종목 수
-  const MAX_WEEKLY_SENDS     = 15;   // 주간 최대 추천 건수 (일 3건 × 5일 기준)
-
-  // ===== 주간 발송 한도 도달 안내 — 이번 주 최초 도달 시에만 1회 발송 =====
-  // (매 10분 스캔 사이클마다 중복 안내를 막기 위해 store.swingWeeklyCapNotifiedWeek에
-  // 이미 안내한 주의 첫 거래일(월요일 등)을 기록해두고 비교한다.)
-  function shouldSendWeeklyCapNotice(thisWeekKey, lastNotifiedWeek) {
-    return lastNotifiedWeek !== thisWeekKey;
-  }
 
   const INTRADAY_STOP_THRESH = 2;    // 당일 손절 카운터: 2회 이상 손절 시 당일 신규 발송 억제
   const MAX_SCAN_RUNTIME_MS = 20 * 60 * 1000; // 실행 중 락 최대 유지 시간(비정상 종료 시 락 고착 방지용 자동 해제)
@@ -1587,23 +1579,6 @@ const run = async function () {
     thisWeekDates.flatMap(dt => (store.weeklyRecommendations[dt] || []).map(r => r.code))
   );
   const deduped = qualified.filter(c => !sentThisWeek.has(c.code));
-  const thisWeekCount = thisWeekDates.reduce(
-    (sum, dt) => sum + ((store.weeklyRecommendations[dt] || []).length), 0
-  );
-  if (thisWeekCount >= MAX_WEEKLY_SENDS) {
-    store.swingMeta._runningSince = null; // [NODUP-3-FIX] 조기 종료 경로도 락 해제
-    const thisWeekKey = thisWeekDates[0];
-    if (shouldSendWeeklyCapNotice(thisWeekKey, store.swingWeeklyCapNotifiedWeek)) {
-      const noticeMsg = '📊 [주간 발송 한도 도달]' + NL +
-        '이번 주 스윙 추천 ' + MAX_WEEKLY_SENDS + '건 발송 완료 — 신규 추천 종료' + NL +
-        '(다음 주 월요일부터 재개)';
-      try {
-        await telegram.send(noticeMsg);
-        store.swingWeeklyCapNotifiedWeek = thisWeekKey;
-      } catch (e) {}
-    }
-    return [{ json: { skipped: true, reason: 'Weekly limit', weeklyCount: thisWeekCount } }];
-  }
   const gradeOrder = { '강매': 4, '급등': 3, '매도차익': 2, '매수': 1 };
   deduped.sort((a, b) => {
     const gDiff = (gradeOrder[b.grade] || 0) - (gradeOrder[a.grade] || 0);
@@ -1949,6 +1924,10 @@ const run = async function () {
         type: 'swing', subType: selected[i].type,
         ticker: selected[i].ticker, code: selected[i].code, name: res.resolvedName || selected[i].name,
         entry: res.entry, target: res.target, target1: res.target1, stop: res.stop,
+        // initialStop: 트레일링으로 절대 덮어쓰지 않는 최초 손절가 스냅샷.
+        // weekly-reporter가 손절일을 사후 재구성할 때 이 값을 시드로 써야
+        // "이미 트레일링으로 올라간 현재 stop"을 과거 저가에 소급 적용하는 오판정을 피한다.
+        initialStop: res.stop,
         atrAbs: selected[i].atrAbs,
         holdingDays: holdDays, score: selected[i].score, grade: selected[i].grade,
         isETF: !!selected[i].isETF, // [QI] ETF vs 단일종목 구분 태그
