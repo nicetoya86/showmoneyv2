@@ -436,9 +436,16 @@ const run = async function () {
 
   // 매수 진입 종목만 평가 대상
   const entered = details.filter((d) => d.result !== 'not_entered' && d.result !== 'no_data' && d.result !== 'error');
-  // W-001 수정: 승률 = win/(win+partial_win+loss) — expired는 분모에서 제외
+  // [2026-08-29] 목표달성률 = 최종 목표 100% 완주(win)만 인정. 1차달성(partial_win)은
+  // "덜 번 것"이지 손실이 아니다 — 트레일링 로직상(lib/trailingStop.js TRAIL_BE_GAIN=3%)
+  // target1(=target*0.6)에 닿은 시점엔 이미 손절선이 본전 이상으로 올라가 있어 실제 손절가는
+  // 항상 손익분기~플러스다. 그래서 손절 리스트에 합치지 않고 별도 섹션(🎯 부분익절)으로 유지하되,
+  // 헤드라인 달성률 분자에서는 제외한다(완주 못 했다는 사실은 그대로 보여줘야 함). 분모(evaluated)는
+  // 기존대로 win+partial_win+loss — expired만 제외.
   const evaluated = entered.filter((d) => d.result === 'win' || d.result === 'partial_win' || d.result === 'loss');
-  const winRate = evaluated.length > 0 ? (wins + partialWins) / evaluated.length : 0;
+  const winRate = evaluated.length > 0 ? wins / evaluated.length : 0;
+  // 성공률(부분포함): 부분익절을 손실 아닌 성공으로 잡는 보조 지표 — 목표달성률과 나란히 표기.
+  const successRate = evaluated.length > 0 ? (wins + partialWins) / evaluated.length : 0;
   const enteredCount = entered.length;
 
   // 섹션별 분류
@@ -459,6 +466,7 @@ const run = async function () {
     losses: losses,
     holding: holdListAll.length,
     winRate: (winRate * 100).toFixed(1) + '%',
+    successRate: (successRate * 100).toFixed(1) + '%',
     enteredCount: enteredCount
   }, requestId);
 
@@ -467,6 +475,7 @@ const run = async function () {
   holdList.sort((a, b) => (b.maxReturn || 0) - (a.maxReturn || 0));
   holdListCarry.sort((a, b) => (b.maxReturn || 0) - (a.maxReturn || 0));
   lossList.sort((a, b) => (a.maxReturn || 0) - (b.maxReturn || 0));
+  partialWinList.sort((a, b) => (b.stopPct || 0) - (a.stopPct || 0));
 
   // ===== 깨진 종목명 보완: Naver API로 재조회 =====
   const isGarbled = (s) => !s || !/^[가-힣ᄀ-ᇿ㄰-㆏㈀-㈟！-ﾟ一-鿿 -~]+$/.test(s);
@@ -509,8 +518,9 @@ const run = async function () {
     '📅 ' + weekDates[0] + ' ~ ' + weekDates[weekDates.length - 1] + NL +
     '━━━━━━━━━━━━━━━━━━━━' + NL +
     '총추천 ' + recs.length + '건' + (carryOverRecs.length > 0 ? ' (+이월 ' + carryOverRecs.length + '건)' : '') +
-    ' │ 진입 ' + enteredCount + '건 │ 승률 ' + (evaluated.length > 0 ? (winRate * 100).toFixed(0) + '%' : 'N/A') + NL +
-    '✅ 목표 ' + wins + '건 │ 🎯 1차달성 ' + partialWins + '건 │ ❌ 손절 ' + losses + '건 │ 🔄 보유 ' + holdList.length + '건' + NL +
+    ' │ 진입 ' + enteredCount + '건 │ 목표달성률 ' + (evaluated.length > 0 ? (winRate * 100).toFixed(0) + '%' : 'N/A') +
+    ' (부분포함 ' + (evaluated.length > 0 ? (successRate * 100).toFixed(0) + '%' : 'N/A') + ')' + NL +
+    '✅ 목표 ' + wins + '건 │ 🎯 부분익절 ' + partialWins + '건 │ ❌ 손절 ' + losses + '건 │ 🔄 보유 ' + holdList.length + '건' + NL +
     '━━━━━━━━━━━━━━━━━━━━' + NL;
 
   // ✅ 수익 종목
@@ -522,21 +532,29 @@ const run = async function () {
       let line = carryTag(d) + typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
       if (d.hitTargetDay) line += ' │ ' + shortDate(d.hitTargetDay);
+      if (d.grade) line += ' │ ' + d.grade;
       if (d.score) line += ' │ ' + d.score + '점';
+      if (d.patternType) line += ' │ ' + d.patternType;
+      if (d.signals && d.signals.length) line += ' │ ' + d.signals.join(',');
       msg += line + NL;
     }
   }
 
-  // 🎯 1차 목표 달성 후 손절 (부분 수익)
+  // 🎯 1차 목표 달성 후 손절 (부분 수익 — 손실 아님, 목표달성률 분자에서만 제외)
   if (partialWinList.length > 0) {
-    msg += NL + '🎯 1차달성 (' + partialWinList.length + '건)' + NL;
+    msg += NL + '🎯 부분익절 (' + partialWinList.length + '건, 목표 미완주)' + NL;
     for (const d of partialWinList) {
       const name = resolveName(d);
-      let line = carryTag(d) + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
+      const typeTag = d.isETF === false ? '[단일종목]' : d.isETF ? '[ETF]' : '';
+      let line = carryTag(d) + typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (d.hitTarget1Day) line += ' │ 1차 ' + shortDate(d.hitTarget1Day);
-      if (d.hitStopDay) line += ' │ 손절 ' + shortDate(d.hitStopDay);
+      if (d.hitStopDay) line += ' │ 청산 ' + shortDate(d.hitStopDay);
+      if (Number.isFinite(d.stopPct)) line += ' │ 확정 ' + pct(d.stopPct);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
+      if (d.grade) line += ' │ ' + d.grade;
       if (d.score) line += ' │ ' + d.score + '점';
+      if (d.patternType) line += ' │ ' + d.patternType;
+      if (d.signals && d.signals.length) line += ' │ ' + d.signals.join(',');
       msg += line + NL;
     }
   }
@@ -569,7 +587,7 @@ const run = async function () {
     }
   }
 
-  // ❌ 손절 종목
+  // ❌ 손절 종목 (진짜 손실 — 1차 목표조차 못 찍고 손절가 도달)
   if (lossList.length > 0) {
     msg += NL + '❌ 손절 (' + lossList.length + '건)' + NL;
     for (const d of lossList) {
@@ -577,8 +595,12 @@ const run = async function () {
       const typeTag = d.isETF === false ? '[단일종목]' : d.isETF ? '[ETF]' : '';
       let line = carryTag(d) + typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
+      if (Number.isFinite(d.stopPct)) line += ' │ 확정 ' + pct(d.stopPct);
       if (d.hitStopDay) line += ' │ 손절 ' + shortDate(d.hitStopDay);
+      if (d.grade) line += ' │ ' + d.grade;
       if (d.score) line += ' │ ' + d.score + '점';
+      if (d.patternType) line += ' │ ' + d.patternType;
+      if (d.signals && d.signals.length) line += ' │ ' + d.signals.join(',');
       msg += line + NL;
     }
     // [QI-5] 손절 카운터 갱신 — 당일 손절 카운트를 store에 기록

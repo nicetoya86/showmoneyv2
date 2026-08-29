@@ -1956,6 +1956,7 @@ const run = async function () {
         initialStop: res.stop,
         atrAbs: selected[i].atrAbs,
         holdingDays: holdDays, score: selected[i].score, grade: selected[i].grade,
+        patternType: selected[i].patternType, signals: (selected[i].signals || []).slice(0, 3),
         isETF: !!selected[i].isETF, // [QI] ETF vs 단일종목 구분 태그
       });
 
