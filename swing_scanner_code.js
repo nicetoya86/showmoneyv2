@@ -102,6 +102,9 @@ const run = async function () {
   const STOP_C_HOUR = 11;             // 패턴C(촉매) 전용 종료 시각
   const STOP_C_MINUTE = 30;           // 패턴C는 11:30 이후 추격 위험
   const MAX_STOCK_PER_SEND   = 3;    // 1회 최대 발송 종목 수
+  const MAX_STOCK_PER_SEND_BEAR = 1; // [FIX-2026-09-05] 약세장(regimeLevel>=2) 서킷브레이커: 강매 전용
+                                      // 게이트만으로는 손절 편중(주간 리포트 팩트체크에서 64% 확인)을
+                                      // 못 막아서, 이미 "약세장"이라 판정한 회차엔 발송 수 자체를 줄인다.
 
   const INTRADAY_STOP_THRESH = 2;    // 당일 손절 카운터: 2회 이상 손절 시 당일 신규 발송 억제
   const MAX_SCAN_RUNTIME_MS = 20 * 60 * 1000; // 실행 중 락 최대 유지 시간(비정상 종료 시 락 고착 방지용 자동 해제)
@@ -1612,7 +1615,17 @@ const run = async function () {
     const gDiff = (gradeOrder[b.grade] || 0) - (gradeOrder[a.grade] || 0);
     return gDiff !== 0 ? gDiff : (b.rankScore || 0) - (a.rankScore || 0);
   });
-  const selected = deduped.slice(0, MAX_STOCK_PER_SEND);
+  // [FIX-2026-09-05] 약세장 서킷브레이커 — 개별 종목 필터(강매 전용, line ~1394)는 이미
+  // 통과했지만, 회차당 발송 수 자체를 줄여 약세장 물량을 추가로 제한한다.
+  const bearRg = await getMarketRegime(store, today);
+  const bearRegimeLevel = bearRg?.regimeLevel ?? 0;
+  const maxStockPerSend = bearRegimeLevel >= 2 ? MAX_STOCK_PER_SEND_BEAR : MAX_STOCK_PER_SEND;
+  const selected = deduped.slice(0, maxStockPerSend);
+  if (bearRegimeLevel >= 2 && deduped.length > selected.length) {
+    logger.info('Bear-regime circuit breaker trimmed candidates', {
+      regimeLevel: bearRegimeLevel, qualified: deduped.length, sent: selected.length, cap: maxStockPerSend,
+    }, requestId);
+  }
   // ===== /선정 필터 =====
   // MIN_DAILY_PICKS=0: 0건이면 알림 없이 정상 종료
 
