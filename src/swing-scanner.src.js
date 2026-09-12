@@ -732,89 +732,56 @@ const run = async function () {
     ks.lastFailReason = String(reason || 'unknown');
   };
 
+  // Naver Finance가 Next.js 프론트로 개편되며 구 HTML(sise_market_sum/sise_quant) 스크래핑이
+  // 영구 실패하게 됨 (2026-09-11 KRX 유니버스 로드 실패 원인) → 모바일 JSON API로 교체
+  const fetchNaverMarketValue = async (category, maxPages) => {
+    const codeSet = new Set();
+    const out = [];
+    let consecutiveErrors = 0;
+    for (let p = 1; !maxPages || p <= maxPages; p++) {
+      try {
+        const url = `https://m.stock.naver.com/api/stocks/marketValue/${category}?page=${p}&pageSize=100`;
+        const r = await http({
+          method: 'GET', url,
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://m.stock.naver.com/' },
+          json: true,
+        });
+        const stocks = (r && r.stocks) || [];
+        if (stocks.length === 0) break;
+        consecutiveErrors = 0;
+        for (const s of stocks) {
+          const c = String(s.itemCode || '');
+          if (!c || codeSet.has(c) || s.stockEndType !== 'stock') continue;
+          codeSet.add(c);
+          const nm = String(s.stockName || c).trim();
+          const trdVal = Number(String(s.accumulatedTradingValue || '0').replace(/,/g, '')) * 1000000;
+          out.push({
+            ISU_SRT_CD: c, ISU_ABBRV: nm, ISU_NM: nm, MKT_NM: category,
+            TDD_CLSPRC: String(s.closePrice || '0').replace(/,/g, ''),
+            ACC_TRDVAL: String(trdVal),
+          });
+        }
+        if (!r || !r.totalCount || p * 100 >= r.totalCount) break;
+        await new Promise((res) => setTimeout(res, 100 + Math.floor(Math.random() * 50)));
+      } catch (e) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) break; // 연속 3회 실패 시 rate-limit으로 판단, 조기 종료
+        await new Promise((res) => setTimeout(res, 500));
+      }
+    }
+    return out;
+  };
+
   if (store.krxUniverseCache && store.krxUniverseCache.trdDd === trdDd && Array.isArray(store.krxUniverseCache.rows) && store.krxUniverseCache.rows.length) {
     rows = store.krxUniverseCache.rows;
     krxUniverseSource = 'cache';
   } else {
     krxUniverseSource = 'naver';
 
-    let _iconv = null;
-    try { _iconv = require('iconv-lite'); } catch(e) {}
-    const fetchText = async (url) => {
-      if (_iconv) {
-        // Naver sise 페이지는 EUC-KR 인코딩 → iconv-lite로 정확히 디코딩
-        const raw = await http({
-          method: 'GET', url,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://finance.naver.com/', 'Accept': 'text/html'
-          },
-          json: false, encoding: null
-        });
-        const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw || ''), 'binary');
-        return _iconv.decode(buf, 'euc-kr');
-      }
-      // iconv-lite 없을 때 utf8 폴백 (한글 깨질 수 있음)
-      const raw = await http({
-        method: 'GET', url,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://finance.naver.com/', 'Accept': 'text/html', 'Accept-Charset': 'utf-8'
-        },
-        json: false, encoding: 'utf8'
-      });
-      if (Buffer.isBuffer(raw)) return raw.toString('utf8');
-      return String(raw ?? '');
-    };
-
-    const extractCodeNamePairs = (html) => {
-      const out = [];
-      const re = new RegExp('/item/main\\.naver\\?code=(\\d{6})[^>]*>([^<]{1,60})<', 'g');
-      let m;
-      while ((m = re.exec(html))) {
-        out.push([m[1], String(m[2] || '').trim()]);
-      }
-      return out;
-    };
-
-    const codeSet = new Set();
-    const naverRows = [];
-    const MAX_PAGES = 40; // 상위 40 pages (~2000종목/시장) — 전체 시장 커버 (KOSDAQ ~1600종목)
-
-    const fetchAllFromMarket = async (sosok, mktNm) => {
-      let consecutiveErrors = 0;
-      for (let p = 1; p <= MAX_PAGES; p++) {
-        try {
-          const url = `https://finance.naver.com/sise/sise_market_sum.naver?sosok=${sosok}&page=${p}`;
-          const html = await fetchText(url);
-          const pairs = extractCodeNamePairs(html);
-          if (!pairs || pairs.length === 0) break;
-          consecutiveErrors = 0; // 성공 시 오류 카운터 초기화
-          let newStocks = 0;
-          for (const [c, nm] of pairs) {
-            if (!c || codeSet.has(c)) continue;
-            codeSet.add(c);
-            naverRows.push({
-              ISU_SRT_CD: c, ISU_ABBRV: nm || c, ISU_NM: nm || c, MKT_NM: mktNm,
-              TDD_CLSPRC: String(MIN_PRICE),
-              ACC_TRDVAL: String(MIN_INTRADAY_TURNOVER),
-            });
-            newStocks++;
-          }
-          if (newStocks === 0) break;
-          await new Promise((r) => setTimeout(r, 100 + Math.floor(Math.random() * 50)));
-        } catch (e) {
-          consecutiveErrors++;
-          if (consecutiveErrors >= 3) break; // 연속 3회 실패 시 rate-limit으로 판단, 조기 종료
-          await new Promise((r) => setTimeout(r, 500));
-        }
-      }
-    };
-
     try {
-      await fetchAllFromMarket(0, 'KOSPI');
-      await fetchAllFromMarket(1, 'KOSDAQ');
-      rows = naverRows;
+      const kospi = await fetchNaverMarketValue('KOSPI');
+      const kosdaq = await fetchNaverMarketValue('KOSDAQ');
+      rows = [...kospi, ...kosdaq];
       if (rows.length > 0) {
         krxUniverseSource = 'naver';
         // Naver 종목명을 별도 저장 (KRX 인코딩 깨짐 방지용 — KRX가 캐시 덮어써도 보존)
@@ -905,64 +872,12 @@ const run = async function () {
     }
   }
 
-  // naver fallback (sise_quant: sorted by turnover, top 3 pages)
+  // naver fallback (동일 API를 상위 10페이지/시장만 재시도)
   if (!rows || rows.length === 0) {
-    const fetchText = async (url) => {
-      const raw = await http({
-        method: 'GET', url,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': 'https://finance.naver.com/', 'Accept': 'text/html', 'Accept-Charset': 'utf-8'
-        },
-        json: false, encoding: 'utf8'
-      });
-      if (Buffer.isBuffer(raw)) return raw.toString('utf8');
-      return String(raw ?? '');
-    };
-
-    const extractCodeNamePairs = (html) => {
-      const out = [];
-      const re = new RegExp('/item/main\\.naver\\?code=(\\d{6})[^>]*>([^<]{1,60})<', 'g');
-      let m;
-      while ((m = re.exec(html))) {
-        out.push([m[1], String(m[2] || '').trim()]);
-      }
-      return out;
-    };
-
-    const MAX_PAGES = 3;
-    const codeSet = new Set();
-    const naverRows = [];
-    const addFromMarket = async (sosok, mktNm) => {
-      for (let p = 1; p <= MAX_PAGES; p++) {
-        try {
-          const url = `https://finance.naver.com/sise/sise_quant.naver?sosok=${sosok}&page=${p}`;
-          const html = await fetchText(url);
-          const pairs = extractCodeNamePairs(html);
-          if (!pairs || pairs.length === 0) break;
-          let added = 0;
-          for (const [c, nm] of pairs) {
-            if (!c || codeSet.has(c)) continue;
-            codeSet.add(c);
-            naverRows.push({
-              ISU_SRT_CD: c, ISU_ABBRV: nm || c, ISU_NM: nm || c, MKT_NM: mktNm,
-              TDD_CLSPRC: String(MIN_PRICE),
-              ACC_TRDVAL: String(MIN_INTRADAY_TURNOVER),
-            });
-            added++;
-          }
-          if (added === 0) break;
-        } catch (e) {
-          await new Promise((r) => setTimeout(r, 500));
-        }
-        await new Promise((r) => setTimeout(r, 120 + Math.floor(Math.random() * 120)));
-      }
-    };
-
     try {
-      await addFromMarket(0, 'KOSPI');
-      await addFromMarket(1, 'KOSDAQ');
-      rows = naverRows;
+      const kospi = await fetchNaverMarketValue('KOSPI', 10);
+      const kosdaq = await fetchNaverMarketValue('KOSDAQ', 10);
+      rows = [...kospi, ...kosdaq];
       if (rows.length > 0) krxUniverseSource = 'naver_fallback';
     } catch (e) {
       krxUniverseError = String(e?.message || e);
