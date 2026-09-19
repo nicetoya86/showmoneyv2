@@ -1556,6 +1556,11 @@ const run = async function () {
   const TOSS_ASK_BID_BLOCK_RATIO = 1.5; // 매도잔량이 매수잔량의 1.5배 넘으면 발송 보류
   const TOSS_WEAK_BUY_RATIO_C = 0.4;    // 패턴C 한정: 실시간 매수체결비율 40% 미만이면 발송 보류
   const TOSS_GAP_REBASE_THRESHOLD = 0.02; // 실시간가-전일종가 괴리가 2% 이상이면 실시간가로 매수가 재계산
+  // [FIX-2026-09-13] 목표가를 아직 안 넘었어도 발송 시점에 이미 목표거리(targetPct)의
+  // 상당 부분을 선반영한 종목은 "추격 후 반납" 리스크가 큼(원익/흥구석유/금강철강
+  // 09-01~09-04 케이스: +35~43% 찍고 확정 -0.1~-7.4%로 마감 — 전부 발송일 당일 반납).
+  // chasingRisk(목표가 초과)보다 낮은 문턱에서 미리 차단한다.
+  const TOSS_EXTENSION_BLOCK_RATIO = 0.7; // 실시간 괴리가 목표거리의 70% 이상이면 발송 보류
 
   const _tossApiKey = () => store.tossApiKey || '';
 
@@ -1658,21 +1663,27 @@ const run = async function () {
     // 넘겼거나 이미 손절가 밑으로 꺼진 "실전에서 재현 불가능한 신호"까지 보내는 건 별개
     // 문제다(2026-07-13~18 QA의 한성기업/003680, 동화약품/000020이 둘 다 이 케이스).
     // 패턴별 예외를 두지 않고 모든 패턴에 동일한 실시간가 검증을 적용한다.
-    let gapPct = null, chasingRisk = false, alreadyStoppedOut = false;
+    let gapPct = null, chasingRisk = false, alreadyStoppedOut = false, overExtended = false;
     if (livePrice != null && c.entry > 0) {
       gapPct = (livePrice - c.entry) / c.entry;
       if (c.target > 0 && livePrice >= c.target) chasingRisk = true;
       if (c.stop > 0 && livePrice <= c.stop) alreadyStoppedOut = true;
+      const targetPctForGate = c.target > 0 ? (c.target / c.entry - 1) : null;
+      if (!chasingRisk && targetPctForGate != null && targetPctForGate > 0 && gapPct >= targetPctForGate * TOSS_EXTENSION_BLOCK_RATIO) {
+        overExtended = true;
+      }
     }
     info.livePrice = livePrice;
     info.gapPct = gapPct;
 
-    // ---- 차단 판정 (우선순위: VI > 실시간가 추격위험/이미 손절권 > 호가매도우위 > 패턴C 매수체결비율저조) ----
+    // ---- 차단 판정 (우선순위: VI > 실시간가 추격위험/이미 손절권 > 과열 선반영 > 호가매도우위 > 패턴C 매수체결비율저조) ----
     let ok = true, reason = null;
     if (info.viActive) {
       ok = false; reason = 'VI 발동 중';
     } else if (chasingRisk) {
       ok = false; reason = '실시간가가 이미 목표가 초과(추격매수 위험, 괴리 ' + (gapPct * 100).toFixed(1) + '%)';
+    } else if (overExtended) {
+      ok = false; reason = '실시간가가 목표거리의 ' + (TOSS_EXTENSION_BLOCK_RATIO * 100).toFixed(0) + '% 이상 선반영(과열 추격 위험, 괴리 ' + (gapPct * 100).toFixed(1) + '%)';
     } else if (alreadyStoppedOut) {
       ok = false; reason = '실시간가가 이미 손절가 이하(발송 전 셋업 무효화, 괴리 ' + (gapPct * 100).toFixed(1) + '%)';
     } else if (askTotal != null && bidTotal != null && askTotal > bidTotal * TOSS_ASK_BID_BLOCK_RATIO) {

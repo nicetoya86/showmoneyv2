@@ -192,16 +192,15 @@ const run = async function () {
       }
 
       // ===== 매수가 진입 여부 확인 =====
-      // 추천 매수가(r.entry)에 저가(low)가 도달했을 때 진입으로 판정
-      // [BUGFIX-2026-07-19] 거래 없던 날(0값)은 평가에서 제외 — 위 isTradedDay 설명 참고
-      let entryHit = !r.entry || r.entry <= 0; // 매수가 미설정 시 진입 간주
-      for (const day of relevant) {
-        if (!isTradedDay(day)) continue;
-        if (Number(day.lowPrice) <= r.entry) {
-          entryHit = true;
-          break;
-        }
-      }
+      // [FIX-2026-09-19] 예전엔 "추천 매수가(r.entry)에 저가(low)가 도달"해야 진입으로 쳤음(지정가
+      // 리밋 대기 모델). 그런데 실제 발송 문구(swing-scanner.src.js entryNote)는 모든 케이스에서
+      // "현재가 기준 즉시 진입" 또는 "실시간 체결가 기준 즉시 진입"이지 "눌림목 대기"가 아니다 —
+      // entry 자체가 이미 발송 시점의 (거의) 체결 가능가다(TOSS-LIVEPRICE 재계산 포함). 그런데도
+      // 리포트만 지정가 대기 모델로 판정하다 보니, 눌림 없이 쭉 오른 강한 종목일수록 "매수 미도달"로
+      // 잘못 분류돼 최고 성과 종목이 통계에서 통째로 빠지는 문제가 09-19 리포트에서 3주 연속 확인됨
+      // (샌즈랩/라온시큐어/한국첨단소재 등 이후최고 +48~56%). 문구와 판정 모델을 일치시켜 즉시
+      // 체결로 취급한다 — 매수가 미설정(데이터 이상)일 때만 기존처럼 예외 처리.
+      const entryHit = true; // 즉시진입 모델 — 항상 진입으로 간주
 
       // 매수가 미진입 → 리포트 제외
       if (!entryHit) {
@@ -253,6 +252,20 @@ const run = async function () {
         }
       }
 
+      // [FIX-2026-09-05] target1(1차목표)과 손절가가 같은 날 찍히면, 풀타겟 케이스와 동일하게
+      // 일봉만으로는 선후관계가 불명확한데도 "target1 먼저"로 낙관 판정해 partial_win으로 잘못
+      // 분류하던 버그. 그날 장중에 손절가가 target1보다 먼저 찍혔다면 1차목표조차 못 찍은 loss다
+      // (09-05 주간 리포트에서 써니전자/흥구석유/네오이문텍/위더스제약 4종목이 1차=청산 당일인데
+      // 확정%가 마이너스로 나온 게 이 케이스 — partial_win인데 확정 손실이라는 자기모순 표기).
+      // 풀타겟 분봉재확인(resolveSameDayOrder)과 같은 함수를 target1 가격으로 재사용한다.
+      const resolvePartialOrLoss = async () => {
+        if (!hitTarget1Day || hitTarget1Day > hitStopDay) return 'loss';
+        if (hitTarget1Day < hitStopDay) return 'partial_win';
+        const order1 = await resolveSameDayOrder(r.code, hitTarget1Day, r.entry, r.target1, stopAtHitDay);
+        await sleep(300);
+        return order1 === 'stop' ? 'loss' : 'partial_win'; // neither/null → 기존처럼 낙관 폴백
+      };
+
       // 목표/손절 중 먼저 도달한 것 기준 판정
       // partial_win: 1차 목표 달성 후 손절 (이익 실현 일부)
       if (hitTargetDay && hitStopDay && hitTargetDay === hitStopDay) {
@@ -260,15 +273,14 @@ const run = async function () {
         const order = await resolveSameDayOrder(r.code, hitTargetDay, r.entry, r.target, stopAtHitDay);
         await sleep(300);
         if (order === 'target') result = 'win';
-        else if (order === 'stop') result = 'loss';
-        else if (order === 'neither') result = hitTarget1Day && hitTarget1Day <= hitStopDay ? 'partial_win' : 'loss';
+        else if (order === 'neither' || order === 'stop') result = await resolvePartialOrLoss();
         else result = 'win'; // 분봉 조회 실패(null) 시 기존 로직대로 낙관적 폴백
       } else if (hitTargetDay && hitStopDay) {
         result = hitTargetDay <= hitStopDay ? 'win' : 'loss';
       } else if (hitTargetDay) {
         result = 'win';
       } else if (hitStopDay) {
-        result = hitTarget1Day && hitTarget1Day <= hitStopDay ? 'partial_win' : 'loss';
+        result = await resolvePartialOrLoss();
       }
 
       const maxReturn = r.entry > 0 ? (maxHigh - r.entry) / r.entry : 0;
