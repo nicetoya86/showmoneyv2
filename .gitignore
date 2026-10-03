@@ -50,3 +50,14 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Junk / generated (2026-10-03)
+nul
+C*UsersnicetAppDataLocalTempswing_code.txt
+*.pid
+tightened_explore_output.txt
+
+# Live workflow backups contain full staticData + code - NEVER commit; patch diffs are regenerable
+.claude/live_workflow_backup_*.json
+.claude/live_workflow_current_check.json
+.claude/*_patch_diff_*.txt
