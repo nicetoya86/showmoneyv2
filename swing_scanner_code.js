@@ -1332,21 +1332,35 @@ const run = async function () {
           if (h > STOP_C_HOUR || (h === STOP_C_HOUR && m >= STOP_C_MINUTE)) return;
         }
 
+        // [FIX-2026-09-26] 스코어링 전에 ATR% 계산 — 이번 재조정에서 변동성 구간을 스코어에
+        // 반영하려면 뒤(목표가/손절가 계산부)에서만 쓰던 atrAbs/atrPct가 여기서도 필요하다.
+        // 순수 함수라 위치만 앞당김(뒤쪽 중복 선언은 제거, 아래 참고).
+        const atrAbs = calcAtrAbs(highD, lowD, dIdx, 14);
+        const atrPct = atrAbs / currentPrice;
+
         // ---- [S] 스코어링 ----
+        // [FIX-2026-09-26] 09-09~09-23 11주/152건 실측 재검증(주간 리포트 항목4 연구) 기준
+        // 패턴 배점을 실측 승률 순서(B지지선50%>D박스39.1%>C촉매25.4%>A눌림목14.6%,n=41)에
+        // 맞춰 재조정. 기존 배점(C60>A50>B45>D40)은 실측과 정반대 순서였음.
         let score = 0;
         const signals = [];
 
-        if (isPatternC) { score += 60; signals.push('촉매이벤트'); }
-        if (isPatternA) { score += 50; signals.push('급등후눌림목'); }
-        if (isPatternB) { score += 45; signals.push('지지선반등'); }
-        if (isPatternD) { score += 40; signals.push('박스권돌파'); }
-        if (isPatternA && isPatternB) { score += 15; signals.push('복합A+B'); }
-        if (isPatternC && isPatternD) { score += 10; signals.push('복합C+D'); }
+        if (isPatternB) { score += 58; signals.push('지지선반등'); }
+        if (isPatternD) { score += 52; signals.push('박스권돌파'); }
+        if (isPatternC) { score += 48; signals.push('촉매이벤트'); }
+        if (isPatternA) { score += 35; signals.push('급등후눌림목'); }
+        // [FIX-2026-09-26] "복합" 태그(패턴 중첩)는 "신호 다중확인=더 강함"이라는 가정으로
+        // 가산점이었으나, 실측은 정반대(복합 있음: 승률14.3%/기대값-1.03%, n=28 vs
+        // 복합 없음: 승률29.1%/기대값+1.91%, n=110) — 보너스를 페널티로 뒤집는다.
+        if (isPatternA && isPatternB) { score -= 15; signals.push('복합A+B'); }
+        if (isPatternC && isPatternD) { score -= 10; signals.push('복합C+D'); }
 
         if      (rvolVal >= 8.0) { score += 25; signals.push('거래량8x+'); }
         else if (rvolVal >= 5.0) { score += 18; signals.push('거래량5x'); }
         else if (rvolVal >= 3.0) { score += 12; signals.push('거래량3x'); }
-        else if (rvolVal >= 2.0) { score +=  6; signals.push('거래량2x'); }
+        // [FIX-2026-09-26] 거래량2x 티어는 실측 승률11.1%/기대값-1.13%(n=9, 표본 작음)로
+        // 다른 티어와 달리 근거가 없다 — 표본이 작아 페널티 대신 가산점만 제거(0점, 보류).
+        else if (rvolVal >= 2.0) { signals.push('거래량2x'); }
 
         if      (obvResult.obvTrend ===  1) { score += 20; signals.push('OBV수급↑'); }
         else if (obvResult.obvTrend === -1) { score -=  8; }
@@ -1355,12 +1369,23 @@ const run = async function () {
           score += 15; signals.push('MACD골든크로스');
         } else if (Number.isFinite(macdResult.hist) && macdResult.hist > 0) {
           if (Number.isFinite(macdResult.histPrev) && macdResult.hist > macdResult.histPrev) {
-            score += 10; signals.push('MACD↑');
+            // [FIX-2026-09-26] MACD↑(비골든크로스) 실측 승률 0%(n=5, 전패) — 표본 작아
+            // 페널티는 안 걸되 가산점은 제거.
+            signals.push('MACD↑');
           }
         } else if (Number.isFinite(macdResult.hist) && Number.isFinite(macdResult.histPrev)
                    && macdResult.hist < 0 && macdResult.histPrev < 0 && !isPatternC) {
           return;
         }
+
+        // [FIX-2026-09-26] 진입가/ATR% 구간 — 기존엔 스코어링에 전혀 반영 안 되던 축.
+        // 진입가: <5000원 승률43.3%/기대값+3.2%(n=30) vs 3만원+ 승률5.3%/기대값-2.92%(n=19).
+        if      (currentPrice < 5000)   { score += 15; signals.push('저가주'); }
+        else if (currentPrice >= 30000) { score -= 20; signals.push('고가주'); }
+        // ATR%: 5~7% 구간이 스윗스팟(승률35.4%/기대값+2.4%,n=48), 3~5%는 오히려 마이너스
+        // (기대값-0.29%,n=43) — 비단조라 두 구간만 조정.
+        if      (atrPct >= 0.05 && atrPct < 0.07) { score += 10; signals.push('ATR스윗스팟'); }
+        else if (atrPct >= 0.03 && atrPct < 0.05) { score -= 10; signals.push('ATR저변동주의'); }
 
         if (sma20_d[dIdx] > sma60_d[dIdx]) { score += 15; signals.push('일봉정배열'); }
         if      (intradayStrength >= 0.7) { score += 12; signals.push('장마감강세'); }
@@ -1395,8 +1420,7 @@ const run = async function () {
         if (regimeLevel >= 1 && grade === '매도차익') return; // 중립장: 매도차익 차단
 
         // ---- [T] 목표가·손절가 ----
-        const atrAbs = calcAtrAbs(highD, lowD, dIdx, 14);
-        const atrPct = atrAbs / currentPrice;
+        // atrAbs/atrPct는 위 스코어링 단계에서 이미 계산됨(재사용).
         let targetPct, stopPct;
         if (isStrong) {
           // 강매(110점+)는 패턴과 무관하게 전용 프로파일 적용 (docs/01-plan/features/showmoneyv2.plan.md §6)
@@ -1897,6 +1921,9 @@ const run = async function () {
         holdingDays: holdDays, score: selected[i].score, grade: selected[i].grade,
         patternType: selected[i].patternType, signals: (selected[i].signals || []).slice(0, 3),
         isETF: !!selected[i].isETF, // [QI] ETF vs 단일종목 구분 태그
+        // [SHADOW-2026-10-03] signals는 slice(0,3)라 복합 신호가 붙으면 거래량 태그가 잘린다 —
+        // 실제 rvol을 따로 기록해야 거래량 기준 분석이 오염되지 않는다(발송 로직엔 영향 없음).
+        rvol: Number.isFinite(selected[i].rvolVal) ? +selected[i].rvolVal.toFixed(2) : null,
       });
 
       sent.push(selected[i].ticker);
