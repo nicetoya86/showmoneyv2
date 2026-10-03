@@ -114,8 +114,13 @@ function createNaverClient(http) {
 
 // 트레일링 스탑 계산 — Daily_Position_Monitor(실시간 갱신)와 weekly_reporter(사후 재구성)가
 // 동일한 로직을 공유해야 리포트의 손절일 판정이 실제 운영 동작과 일치한다.
-const TRAIL_BE_GAIN   = 0.03;   // 수익률 3% 이상: 손절→진입가(본전)
-const TRAIL_5_GAIN    = 0.05;   // 수익률 5% 이상: 손절→고점−ATR×1.5
+// [FIX-2026-10-03] 본전 상향 기준 3% → 6%(≈1차목표 target1=목표×0.6). 3%에서 본전으로 올리면 단기 눌림에 걸려
+// 이후 목표까지 간 종목을 털어내는 비용이 보호 효과(175/470건이 실제 손절 회피)와 거의 상쇄되고 약간 순손해였다
+// (백테스트 2,686건 일봉 재현: 6%가 4개 연도 전부 개선 +0.03pp/건, 라이브 분봉 79건 +0.11pp; 둘 다 95% CI가 0 포함 —
+// ponytail: 효과가 작고 통계적으로 확정 아님, 주간 리포트의 부분익절/BE청산 비율로 계속 점검).
+// 6%로 두는 이유: 1차목표 도달 후 손실 없음(partial_win 불변식, weekly-reporter)을 유지하면서 BE 조기발동만 줄이기 위함.
+const TRAIL_BE_GAIN   = 0.06;   // 수익률 6% 이상: 손절→진입가(본전) 이상
+const TRAIL_5_GAIN    = 0.05;   // 수익률 5% 이상: 손절→고점−ATR×1.5 (BE 게이트 6% 안에서만 적용되므로 사실상 6%~10% 구간)
 const TRAIL_10_GAIN   = 0.10;   // 수익률 10% 이상: 손절→고점−ATR×1.0
 const TRAIL_15_GAIN   = 0.15;   // 수익률 15% 이상: 손절→고점−ATR×0.7
 const TRAIL_MULT_5    = 1.5;
@@ -543,7 +548,7 @@ const run = async function () {
         }
         if (!hitStopDay && runningStop > 0 && low <= runningStop) {
           const dayStr = day.localDate.slice(0, 4) + '-' + day.localDate.slice(4, 6) + '-' + day.localDate.slice(6, 8);
-          // [FIX-2026-09-26] 당일 왕복 후보: 그날 고가가 이미 본전 트레일링 티어(3%+)에
+          // [FIX-2026-09-26] 당일 왕복 후보: 그날 고가가 이미 본전 트레일링 티어(TRAIL_BE_GAIN, 현재 6%+)에
           // 진입했다면, "오늘 갱신은 내일부터"라는 단순화 때문에 실제보다 낮은(안 올라간)
           // 스탑으로 오판정할 수 있다 — 분봉으로 그날의 진짜 체크-스케줄 트레일링을 재현한다.
           const dayHighGain = r.entry > 0 ? (high - r.entry) / r.entry : 0;
@@ -648,7 +653,7 @@ const run = async function () {
   const entered = details.filter((d) => d.result !== 'not_entered' && d.result !== 'no_data' && d.result !== 'error');
   // [2026-08-29, 2026-09-26 갱신] 목표달성률 = 최종 목표 100% 완주(win)만 인정. 1차달성
   // (partial_win)은 "덜 번 것"이지 손실이 아니어야 한다 — 트레일링 로직상(lib/trailingStop.js
-  // TRAIL_BE_GAIN=3%) target1(=target*0.6)에 닿으면 손절선이 본전 이상으로 올라가는 게 설계
+  // TRAIL_BE_GAIN=6%, 2026-10-03에 3%에서 상향 — 1차목표 target1(=target*0.6, 약 6%)과 맞춤) target1에 닿으면 손절선이 본전 이상으로 올라가는 게 설계
   // 의도다. 다만 일봉 재구성만으로는 "당일 왕복"을 못 잡아 이 불변식이 깨지는 경우가 있었고
   // (진양화학 051630 09-18 등), replayIntradayStop(분봉 기반 체크스케줄 재현) + stopPct<0
   // 강제 재분류(위 day-loop/판정부 참고)로 바로잡았다. 그래도 남는 partial_win은 손절

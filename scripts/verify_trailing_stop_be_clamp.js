@@ -1,6 +1,6 @@
 /**
  * Self-check for [FIX-2026-09-13] lib/trailingStop.js breakeven clamp:
- * gain>=3%(TRAIL_BE_GAIN) 티어에 들어온 이상, ATR 기반 5%/10%/15% 트레일 값이
+ * gain>=TRAIL_BE_GAIN(6%, 2026-10-03에 3%에서 상향) 티어에 들어온 이상, ATR 기반 5%/10%/15% 트레일 값이
  * 변동성 때문에 entry 밑으로 계산돼도 절대 entry 밑으로는 안 내려가야 한다.
  *
  * 회귀 재현: 원익/흥구석유/금강철강(09-01~09-04) — 고변동성 촉매주가 +35~43%
@@ -56,6 +56,17 @@ const assertEq = (label, got, want) => {
   const existingStop = 10500; // 이미 본전보다 높게 올라가 있던 경우
   const stop = calcTrailingStop(entry, 10200, 500, 0.02 /* BE 미달 */, existingStop);
   assertEq('BE 미달 gain -> 기존 stop 그대로 유지(낮아지지 않음)', stop, existingStop);
+}
+
+// [FIX-2026-10-03] BE 기준 6% 상향: 6% 미만에선 본전 상향 없음, 6%부터 본전 이상
+{
+  const { TRAIL_BE_GAIN } = require('../lib/trailingStop');
+  assertEq('TRAIL_BE_GAIN은 6%', TRAIL_BE_GAIN, 0.06);
+  const entry = 10000;
+  const init = 9600; // -4% 초기 손절
+  assertEq('+3% 도달 -> 더 이상 본전으로 안 올림(초기 손절 유지)', calcTrailingStop(entry, 10300, 300, 0.03, init), init);
+  assertEq('+5.9% 도달 -> 아직 본전 상향 없음', calcTrailingStop(entry, 10590, 300, 0.059, init), init);
+  assertGte('+6.0% 도달 -> 본전 이상으로 상향', calcTrailingStop(entry, 10600, 800, 0.06, init), entry);
 }
 
 if (failures > 0) {
