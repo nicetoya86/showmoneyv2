@@ -151,6 +151,143 @@ function calcTrailingStop(entry, currentHigh, atr, currentGain, existingStop) {
   return Math.max(newStop, existingStop);
 }
 
+// Daily_Position_Monitor의 실제 체크 스케줄(2026-09-19 cadence tightening, commit 878c54e).
+// weekly_reporter의 일봉 단위 재구성("오늘 갱신은 내일부터 반영")은 같은 날 안에서 큰 상승 후
+// 급락하는 "당일 왕복"을 못 잡는다 — 실제로는 이 체크 시각마다 트레일링이 올라갔을 것이므로
+// 분봉으로 재현해야 그날의 진짜 손절가/시각이 나온다.
+const INTRADAY_CHECK_TIMES = ['100000', '110000', '123000', '133000', '143000'];
+
+// [FIX-2026-09-26] 순수 함수 — 분봉 배열을 받아 그날의 실제 체크 스케줄대로 트레일링을
+// 재현한다(I/O 없음, 테스트 용이). minuteBars는 { localDateTime:'yyyyMMddHHmmss', highPrice,
+// lowPrice } 형태로 시간순 정렬돼 있다고 가정(Naver 분봉 API 응답 그대로).
+// 반환: 그날 안에서 실제로 손절가에 닿으면 { stopPrice, stopTime } — 못 닿으면(트레일링이
+// 먼저 올라가 방어됨) null.
+function replayIntradayStopFromBars(entry, atrAbs, dayOpenStop, minuteBars, checkTimes) {
+  checkTimes = checkTimes || INTRADAY_CHECK_TIMES;
+  let maxHighSoFar = entry;
+  let runningStop = dayOpenStop;
+  let checkIdx = 0;
+  for (const bar of minuteBars) {
+    const t = String(bar.localDateTime).slice(8, 14); // 'HHMMSS'
+    const hi = Number(bar.highPrice);
+    const lo = Number(bar.lowPrice);
+    if (hi > maxHighSoFar) maxHighSoFar = hi;
+    if (runningStop > 0 && lo <= runningStop) {
+      return { stopPrice: runningStop, stopTime: t };
+    }
+    while (checkIdx < checkTimes.length && t >= checkTimes[checkIdx]) {
+      const gain = (maxHighSoFar - entry) / entry;
+      const atr = getAtr(atrAbs, maxHighSoFar, lo, hi);
+      runningStop = calcTrailingStop(entry, maxHighSoFar, atr, gain, runningStop);
+      checkIdx++;
+    }
+  }
+  return null;
+}
+
+// Shadow 코호트 계산 — 발송은 그대로 두고, weekly-reporter가 "만약 이 규칙으로 걸렀다면"의
+// 성과를 사후 비교하기 위한 순수 함수 모음(I/O 없음). 설계: docs/02-design/features/volume5x-pattern-cap-shadow.design.md
+// 번들러(build_deploy_bundle.js)가 lib 최상위 식별자 충돌을 점검하므로 전부 shadow*/SHADOW_* 접두를 쓴다.
+const SHADOW_CFG = {
+  rvolMin: 5,                    // 참고용 코호트(P0에서 효과 불확실)
+  dayCap: 2,
+  patternPriority: { 'D박스': 0, 'C촉매': 1, 'B지지선': 2, 'A눌림목': 3 }, // 미등록 패턴은 99
+  gateMinClosed: 30, gateMinWeeks: 3, gateMinWinPctGain: 4,
+};
+const SHADOW_COHORTS = ['ALL', 'NOCOMP', 'CAP2', 'NOCOMP+CAP2', 'RVOL5'];
+const SHADOW_GATE_COHORTS = ['NOCOMP', 'CAP2', 'NOCOMP+CAP2', 'RVOL5'];
+
+// 복합 태그는 패턴태그(≤2) 바로 뒤에 붙어 저장되는 signals.slice(0,3) 안에 항상 남는다.
+function shadowIsComposite(r) {
+  return Array.isArray(r && r.signals) && r.signals.some((s) => String(s).includes('복합'));
+}
+
+function shadowCapByDay(recs, cfg) {
+  const byDate = new Map();
+  for (const r of recs) {
+    if (!byDate.has(r.date)) byDate.set(r.date, []);
+    byDate.get(r.date).push(r);
+  }
+  const prio = (r) => (cfg.patternPriority[r.patternType] != null ? cfg.patternPriority[r.patternType] : 99);
+  const out = [];
+  for (const arr of byDate.values()) {
+    out.push(...arr.slice().sort((a, b) => prio(a) - prio(b) || (b.score || 0) - (a.score || 0)).slice(0, cfg.dayCap));
+  }
+  return out;
+}
+
+// 선정은 결과(result)를 보지 않는다 — look-ahead 방지. 미확정(holding 등)도 슬롯을 차지한다.
+function shadowSelect(newRecs, cohort, cfg) {
+  cfg = cfg || SHADOW_CFG;
+  const recs = Array.isArray(newRecs) ? newRecs : [];
+  const noComp = () => recs.filter((r) => !shadowIsComposite(r));
+  if (cohort === 'ALL') return recs.slice();
+  if (cohort === 'NOCOMP') return noComp();
+  if (cohort === 'CAP2') return shadowCapByDay(recs, cfg);
+  if (cohort === 'NOCOMP+CAP2') return shadowCapByDay(noComp(), cfg);
+  if (cohort === 'RVOL5') return recs.filter((r) => Number.isFinite(r.rvol) && r.rvol >= cfg.rvolMin);
+  return [];
+}
+
+// ponytail: 승(win)을 목표가 수익률로 간주(수수료·슬리피지·부분체결 미반영) — 코호트 간 방향 비교용,
+// 절대 수익률 아님. 정밀 손익이 필요하면 체결 단가 기록이 선행돼야 한다.
+function shadowRet(r) {
+  const v = r.result === 'win' ? (r.expiredForced ? r.finalReturn : r.targetPct) : r.stopPct;
+  return Number.isFinite(v) ? v : 0;
+}
+
+function shadowStats(selected, name) {
+  const sel = Array.isArray(selected) ? selected : [];
+  const closed = sel.filter((r) => r.result === 'win' || r.result === 'partial_win' || r.result === 'loss');
+  const win = closed.filter((r) => r.result === 'win').length;
+  const part = closed.filter((r) => r.result === 'partial_win').length;
+  const loss = closed.length - win - part;
+  const c = closed.length;
+  return {
+    name, n: sel.length, closed: c, win, part, loss,
+    winPct: c ? +(100 * win / c).toFixed(1) : 0,
+    wpPct: c ? +(100 * (win + part) / c).toFixed(1) : 0,
+    avgRet: c ? +(100 * closed.reduce((s, r) => s + shadowRet(r), 0) / c).toFixed(2) : 0,
+  };
+}
+
+function computeShadowCohorts(details, cfg) {
+  cfg = cfg || SHADOW_CFG;
+  const newRecs = (Array.isArray(details) ? details : []).filter((d) => d && !d.carryOver);
+  const out = {};
+  for (const name of SHADOW_COHORTS) out[name] = shadowStats(shadowSelect(newRecs, name, cfg), name);
+  out.RVOL5.missing = newRecs.filter((r) => !Number.isFinite(r.rvol)).length;
+  return out;
+}
+
+// 승격 게이트 진행 상황(판정은 사람이 한다). weeklyStatsMap = store.shadowStats (배포 이후 주만 쌓임).
+function shadowGate(weeklyStatsMap, cfg) {
+  cfg = cfg || SHADOW_CFG;
+  const weeks = Object.values(weeklyStatsMap || {});
+  const res = {};
+  for (const name of SHADOW_GATE_COHORTS) {
+    let closedTotal = 0, nWeeks = 0, positive = 0, cWin = 0, aWin = 0, aClosed = 0;
+    for (const w of weeks) {
+      const c = w && w[name], a = w && w.ALL;
+      if (!c || !a || !(a.closed > 0)) continue;
+      closedTotal += c.closed;
+      cWin += c.win; aWin += a.win; aClosed += a.closed;
+      if (c.closed >= 5) { // 확정 5건 미만 주는 방향 판정 제외
+        nWeeks++;
+        if (c.winPct > a.winPct && c.avgRet > a.avgRet) positive++;
+      }
+    }
+    const pooledWinGain = closedTotal > 0 && aClosed > 0 ? +(100 * cWin / closedTotal - 100 * aWin / aClosed).toFixed(1) : 0;
+    res[name] = {
+      closedTotal, weeks: nWeeks, weeksPositive: positive, pooledWinGain,
+      passN: closedTotal >= cfg.gateMinClosed,
+      passWeeks: nWeeks >= cfg.gateMinWeeks && positive * 3 >= nWeeks * 2,
+      passGain: pooledWinGain >= cfg.gateMinWinPctGain,
+    };
+  }
+  return res;
+}
+
 
 const run = async function () {
   const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
@@ -299,6 +436,21 @@ const run = async function () {
     return 'neither';
   };
 
+  // [FIX-2026-09-26] 일봉 단위 재구성은 "오늘 갱신은 내일부터 반영"으로 단순화돼 있어(아래
+  // day-loop 주석 참고), 같은 날 안에서 크게 올랐다가 반납하는 "당일 왕복"의 실제 손절가를
+  // 못 잡는다 — 진양화학(051630, 09-18) 케이스로 확인: 09:00에 1차목표 찍고 급락했는데,
+  // 일봉 모델은 원래(안 올라간) 손절가로 하루 종일 비교해 확정 -4.5%로 잡았다. 실제로는
+  // Daily_Position_Monitor의 체크 스케줄(10:00 등)이 그 사이에 손절가를 본전 위로 올려서,
+  // 분봉으로 재현하면 확정이 오히려 +9%대 플러스로 뒤집힌다. 이 함수는 그 재현을 위해
+  // 분봉을 가져오기만 하고, 실제 재현 계산은 lib/trailingStop.js의 순수 함수에 위임한다.
+  // 호출 비용 때문에(분봉 API 1회 추가) 당일 고가가 트레일링 티어(3%+)에 진입한 "왕복 후보일"
+  // 에서만 호출한다(day-loop 참고).
+  const replayIntradayStop = async (code, dateStr, entry, atrAbs, dayOpenStop) => {
+    const minuteData = await naver.fetchMinute(code, dateStr);
+    if (!minuteData || minuteData.length === 0) return undefined; // 분봉 없음 → 폴백 신호
+    return replayIntradayStopFromBars(entry, atrAbs, dayOpenStop, minuteData);
+  };
+
   // ===== 성과 평가: 매수가 진입 여부 + 목표가/손절가 도달 여부 =====
   const details = [];
   let wins = 0;
@@ -390,8 +542,27 @@ const run = async function () {
           hitTarget1Day = day.localDate.slice(0, 4) + '-' + day.localDate.slice(4, 6) + '-' + day.localDate.slice(6, 8);
         }
         if (!hitStopDay && runningStop > 0 && low <= runningStop) {
-          hitStopDay = day.localDate.slice(0, 4) + '-' + day.localDate.slice(4, 6) + '-' + day.localDate.slice(6, 8);
-          stopAtHitDay = runningStop;
+          const dayStr = day.localDate.slice(0, 4) + '-' + day.localDate.slice(4, 6) + '-' + day.localDate.slice(6, 8);
+          // [FIX-2026-09-26] 당일 왕복 후보: 그날 고가가 이미 본전 트레일링 티어(3%+)에
+          // 진입했다면, "오늘 갱신은 내일부터"라는 단순화 때문에 실제보다 낮은(안 올라간)
+          // 스탑으로 오판정할 수 있다 — 분봉으로 그날의 진짜 체크-스케줄 트레일링을 재현한다.
+          const dayHighGain = r.entry > 0 ? (high - r.entry) / r.entry : 0;
+          if (dayHighGain >= TRAIL_BE_GAIN) {
+            const replay = await replayIntradayStop(r.code, dayStr, r.entry, r.atrAbs, runningStop);
+            await sleep(300);
+            if (replay === undefined) {
+              // 분봉 조회 실패 → 기존처럼 일봉 기준(보수적) 폴백
+              hitStopDay = dayStr;
+              stopAtHitDay = runningStop;
+            } else if (replay !== null) {
+              hitStopDay = dayStr;
+              stopAtHitDay = replay.stopPrice;
+            }
+            // replay === null: 체크 스케줄대로면 그날 안에서는 실제로 손절 안 걸림 — 다음날로 이월.
+          } else {
+            hitStopDay = dayStr;
+            stopAtHitDay = runningStop;
+          }
         }
         if (r.entry > 0 && runningStop > 0) {
           const tierGain = (high - r.entry) / r.entry;
@@ -424,25 +595,48 @@ const run = async function () {
         else if (order === 'neither' || order === 'stop') result = await resolvePartialOrLoss();
         else result = 'win'; // 분봉 조회 실패(null) 시 기존 로직대로 낙관적 폴백
       } else if (hitTargetDay && hitStopDay) {
-        result = hitTargetDay <= hitStopDay ? 'win' : 'loss';
+        // [FIX-2026-10-03] 풀타겟이 손절보다 "늦게" 찍힌 경우(손절 먼저)도 무조건 loss가 아니다 —
+        // 그 전에 1차목표를 먼저 찍고 본전 이상 트레일링 스탑에서 청산됐다면 부분익절이다
+        // (KSS해운 044450: 1차 09-28 → +6.0% 청산 09-29 → 이후 풀타겟 10-01인데 손절로 분류됨).
+        // 1차목표 선후 판정은 resolvePartialOrLoss가 담당(target1 없으면/손절 뒤면 loss, 확정<0이면 아래서 loss 강제).
+        result = hitTargetDay <= hitStopDay ? 'win' : await resolvePartialOrLoss();
       } else if (hitTargetDay) {
         result = 'win';
       } else if (hitStopDay) {
         result = await resolvePartialOrLoss();
       }
 
+      // [FIX-2026-09-26] 보유기간(holdingDays)이 다 지나도록 목표/손절 어느 쪽도 안 걸린
+      // 경우 — 예전엔 'expired' 상태로 남아 win/partial/loss 어디에도 안 잡히고 보유
+      // 섹션에 방치됐다(성과 통계에서 통째로 빠짐). 만기 시점 종가(보유하던 가격)를
+      // 진입가와 비교해 이익이면 수익, 손실이면 손절로 확정 판정한다.
+      const expiredForced = (result === 'expired');
+      if (expiredForced && r.entry > 0) {
+        result = finalClose >= r.entry ? 'win' : 'loss';
+      }
+
       const maxReturn = r.entry > 0 ? (maxHigh - r.entry) / r.entry : 0;
       const finalReturn = r.entry > 0 ? (finalClose - r.entry) / r.entry : 0;
       const targetPct = (r.entry > 0 && r.target > 0) ? (r.target / r.entry - 1) : 0;
-      // 실제로 손절이 걸렸다면 그 시점의 stop(stopAtHitDay)을, 아니면 현재 stop을 기준으로 한다.
-      const stopForPct = hitStopDay && stopAtHitDay != null ? stopAtHitDay : r.stop;
+      // 실제로 손절이 걸렸다면 그 시점의 stop(stopAtHitDay)을, 만기청산이면 만기 종가를,
+      // 그 외엔 현재 stop을 기준으로 한다.
+      const stopForPct = expiredForced ? finalClose
+        : hitStopDay && stopAtHitDay != null ? stopAtHitDay : r.stop;
       const stopPct = (r.entry > 0 && stopForPct > 0) ? (stopForPct / r.entry - 1) : 0;
+
+      // [FIX-2026-09-26] 부분익절(partial_win)은 설계상 손실이면 안 된다(트레일링 본전 상향
+      // 덕분 — 위 replayIntradayStop이 대부분의 "당일 왕복" 케이스를 이미 바로잡는다). 그래도
+      // 체크 시각 사이의 순간 갭다운(예: 토마토시스템 393210 09-23, 개장 2분만에 손절가 붕괴)
+      // 처럼 어떤 체크로도 못 잡는 극단적 케이스가 남을 수 있다 — 그런 잔여 케이스까지
+      // "부분익절"로 표기하면 주간 리포트 성공률(부분포함) 지표가 왜곡된다. 최종 확정이
+      // 손실이면 손절로 재분류해 불변식을 코드로 강제한다.
+      if (result === 'partial_win' && stopPct < 0) result = 'loss';
 
       if (result === 'win') wins++;
       else if (result === 'partial_win') partialWins++;
       else if (result === 'loss') losses++;
 
-      details.push({ ...r, result, maxReturn, finalReturn, exitDate, hitTargetDay, hitTarget1Day, hitStopDay, targetPct, stopPct });
+      details.push({ ...r, result, maxReturn, finalReturn, exitDate, hitTargetDay, hitTarget1Day, hitStopDay, targetPct, stopPct, expiredForced });
     } catch (e) {
       logger.error('weekly reporter position evaluation failed', { code: r.code, date: r.date, error: e && e.message }, requestId);
       details.push({ ...r, result: 'error', maxReturn: 0, finalReturn: 0, exitDate: '' });
@@ -452,12 +646,17 @@ const run = async function () {
 
   // 매수 진입 종목만 평가 대상
   const entered = details.filter((d) => d.result !== 'not_entered' && d.result !== 'no_data' && d.result !== 'error');
-  // [2026-08-29] 목표달성률 = 최종 목표 100% 완주(win)만 인정. 1차달성(partial_win)은
-  // "덜 번 것"이지 손실이 아니다 — 트레일링 로직상(lib/trailingStop.js TRAIL_BE_GAIN=3%)
-  // target1(=target*0.6)에 닿은 시점엔 이미 손절선이 본전 이상으로 올라가 있어 실제 손절가는
-  // 항상 손익분기~플러스다. 그래서 손절 리스트에 합치지 않고 별도 섹션(🎯 부분익절)으로 유지하되,
-  // 헤드라인 달성률 분자에서는 제외한다(완주 못 했다는 사실은 그대로 보여줘야 함). 분모(evaluated)는
-  // 기존대로 win+partial_win+loss — expired만 제외.
+  // [2026-08-29, 2026-09-26 갱신] 목표달성률 = 최종 목표 100% 완주(win)만 인정. 1차달성
+  // (partial_win)은 "덜 번 것"이지 손실이 아니어야 한다 — 트레일링 로직상(lib/trailingStop.js
+  // TRAIL_BE_GAIN=3%) target1(=target*0.6)에 닿으면 손절선이 본전 이상으로 올라가는 게 설계
+  // 의도다. 다만 일봉 재구성만으로는 "당일 왕복"을 못 잡아 이 불변식이 깨지는 경우가 있었고
+  // (진양화학 051630 09-18 등), replayIntradayStop(분봉 기반 체크스케줄 재현) + stopPct<0
+  // 강제 재분류(위 day-loop/판정부 참고)로 바로잡았다. 그래도 남는 partial_win은 손절
+  // 리스트에 합치지 않고 별도 섹션(🎯 부분익절)으로 유지하되, 헤드라인 달성률 분자에서는
+  // 제외한다(완주 못 했다는 사실은 그대로 보여줘야 함). 분모(evaluated)는 기존대로
+  // win+partial_win+loss — [FIX-2026-09-26] 'expired'(보유기간 만료까지 목표/손절 모두
+  // 미도달)는 이제 위 day-loop 직후에서 만기 종가 기준으로 win/loss로 강제 확정되므로
+  // (expiredForced) 이 시점엔 실질적으로 남지 않는다(진입가가 0인 이상 케이스만 예외).
   const evaluated = entered.filter((d) => d.result === 'win' || d.result === 'partial_win' || d.result === 'loss');
   const winRate = evaluated.length > 0 ? wins / evaluated.length : 0;
   // 성공률(부분포함): 부분익절을 손실 아닌 성공으로 잡는 보조 지표 — 목표달성률과 나란히 표기.
@@ -548,6 +747,9 @@ const run = async function () {
       let line = carryTag(d) + typeTag + name + '(' + (d.code || '') + ') │ ' + shortDate(d.date);
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
       if (d.hitTargetDay) line += ' │ ' + shortDate(d.hitTargetDay);
+      // [FIX-2026-09-26] 목표가를 실제로 찍은 win과 구분 — 보유기간 만료 시점 종가가
+      // 진입가보다 높아서 수익으로 확정된 경우 표시(목표 미완주였다는 사실을 숨기지 않음).
+      if (d.expiredForced) line += ' │ 만기청산 │ 확정 ' + pct(d.finalReturn);
       if (d.grade) line += ' │ ' + d.grade;
       if (d.score) line += ' │ ' + d.score + '점';
       if (d.patternType) line += ' │ ' + d.patternType;
@@ -613,6 +815,9 @@ const run = async function () {
       if (Number.isFinite(d.maxReturn) && d.maxReturn !== 0) line += ' │ 최고 ' + pct(d.maxReturn);
       if (Number.isFinite(d.stopPct)) line += ' │ 확정 ' + pct(d.stopPct);
       if (d.hitStopDay) line += ' │ 손절 ' + shortDate(d.hitStopDay);
+      // [FIX-2026-09-26] 실제로 손절가를 찍은 게 아니라 보유기간 만료 시점 종가가
+      // 진입가보다 낮아서 손절로 확정된 경우 표시.
+      if (d.expiredForced) line += ' │ 만기청산';
       if (d.grade) line += ' │ ' + d.grade;
       if (d.score) line += ' │ ' + d.score + '점';
       if (d.patternType) line += ' │ ' + d.patternType;
@@ -680,6 +885,37 @@ const run = async function () {
         msg += '⚠️ 3주 연속 미도달+상승 다수 — 진입가를 시가(오픈가) 기준으로 전환 검토 필요' + NL;
       }
     } catch(e) {}
+  }
+
+  // [SHADOW-2026-10-03] 발송 불변 — "복합 제외 / 일 2건 패턴캡 / 거래량 5x(참고)" 가상 코호트를
+  // 실발송과 나란히 비교한다(docs/02-design/features/volume5x-pattern-cap-shadow.design.md).
+  // 계산 실패는 이 섹션만 생략한다(기존 리포트·저장 로직에 영향 없음).
+  try {
+    const sh = computeShadowCohorts(details);
+    if (!store.shadowStats) store.shadowStats = {};
+    store.shadowStats[weekDates[0]] = sh;
+    const shWeeks = Object.keys(store.shadowStats).sort();
+    while (shWeeks.length > 12) delete store.shadowStats[shWeeks.shift()]; // 최근 12주만 보관
+    const gate = shadowGate(store.shadowStats);
+    const fmt = (label, s) => {
+      const base = label + ' 확정 ' + s.closed;
+      if (!s.closed) return base + ' │ 데이터 없음';
+      const diff = s.winPct - sh.ALL.winPct;
+      return base + ' │ 승 ' + s.winPct.toFixed(0) + '%' + (label === '실발송' ? ' │ 부분포함 ' + s.wpPct.toFixed(0) + '%' : '') +
+        ' │ 평균 ' + (s.avgRet >= 0 ? '+' : '') + s.avgRet.toFixed(2) + '%' +
+        (label !== '실발송' ? ' (승률 ' + (diff >= 0 ? '+' : '') + diff.toFixed(0) + '%p)' : '') +
+        (s.closed < 5 ? ' ※표본 적음' : '');
+    };
+    msg += NL + '🔬 Shadow 비교 (발송 불변 · 이번 주 신규 확정 기준)' + NL +
+      fmt('실발송', sh.ALL) + NL +
+      fmt('복합제외', sh.NOCOMP) + NL +
+      fmt('일2건캡', sh.CAP2) + NL +
+      fmt('복합제외+캡', sh['NOCOMP+CAP2']) + NL +
+      fmt('5x+(참고)', sh.RVOL5) + (sh.RVOL5.missing ? ' (rvol 미기록 ' + sh.RVOL5.missing + '건 제외)' : '') + NL +
+      '게이트(배포 후 ' + shWeeks.length + '주): 복합제외 확정 ' + gate.NOCOMP.closedTotal + '/30 · 주별 방향 ' +
+      gate.NOCOMP.weeksPositive + '/' + gate.NOCOMP.weeks + NL;
+  } catch (e) {
+    logger.warning('shadow cohorts failed', { error: e && e.message }, requestId);
   }
 
   msg += NL + '⚠️ 본 리포트는 참고용이며 투자 결과에 책임지지 않습니다.';
