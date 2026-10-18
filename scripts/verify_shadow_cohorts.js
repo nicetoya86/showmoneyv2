@@ -6,6 +6,8 @@
 const assert = require('assert');
 const {
   SHADOW_CFG, shadowIsComposite, shadowSelect, shadowStats, computeShadowCohorts, shadowGate,
+  shadowStateSelect, computeShadowStateCohorts, shadowStateGate, shadowStateSummary, shadowFormatStateSection,
+  SHADOW_STATE_COHORTS, SHADOW_STATE_GATE_COHORTS,
 } = require('../lib/shadowCohorts');
 
 const rec = (o) => Object.assign({
@@ -113,6 +115,124 @@ const reporter = fs.readFileSync(path.join(__dirname, '../src/weekly-reporter.sr
 assert.ok(/rvol: Number\.isFinite\(selected\[i\]\.rvolVal\) \? \+selected\[i\]\.rvolVal\.toFixed\(2\) : null,/.test(scanner), 'scanner rvol 기록');
 assert.ok(/require\('\.\.\/lib\/shadowCohorts'\)/.test(reporter), 'reporter lib require');
 assert.ok(/try \{\s*const sh = computeShadowCohorts\(details\);[\s\S]*?\} catch \(e\) \{\s*logger\.warning\('shadow cohorts failed'/.test(reporter), 'reporter shadow try/catch');
+
+
+// ===== market-state-shadow (design §5, §6) =====
+const S = (o) => rec(Object.assign({ mkt: 'KOSDAQ', mstate: 'UP', sentAt: 1 }, o));
+assert.deepStrictEqual(SHADOW_STATE_COHORTS, ['STATE_BLOCK', 'STATE_PAT', 'STATE_CAP', 'STATE_CAP_BEST', 'STATE_ALL']);
+assert.deepStrictEqual(SHADOW_STATE_GATE_COHORTS, ['STATE_BLOCK', 'STATE_PAT', 'STATE_CAP', 'STATE_ALL']);
+
+// 11. STATE_BLOCK: SURGE·CRASH 제외, 나머지·UNKNOWN 통과
+const blk = shadowStateSelect(['SURGE', 'CRASH', 'UP', 'FLAT', 'DOWN', 'UNKNOWN'].map((s) => S({ mstate: s })), 'STATE_BLOCK');
+assert.deepStrictEqual(blk.map((r) => r.mstate), ['UP', 'FLAT', 'DOWN', 'UNKNOWN']);
+
+// 12. STATE_PAT: SURGE×전체, CRASH×D, DOWN×A 제외 / CRASH×C, DOWN×B, UNKNOWN×D 통과
+const patIn = [S({ mstate: 'SURGE', patternType: 'C촉매' }), S({ mstate: 'CRASH', patternType: 'D박스' }),
+  S({ mstate: 'CRASH', patternType: 'C촉매' }), S({ mstate: 'DOWN', patternType: 'A눌림목' }),
+  S({ mstate: 'DOWN', patternType: 'B지지선' }), S({ mstate: 'UNKNOWN', patternType: 'D박스' })];
+assert.deepStrictEqual(shadowStateSelect(patIn, 'STATE_PAT').map((r) => r.mstate + r.patternType),
+  ['CRASHC촉매', 'DOWNB지지선', 'UNKNOWND박스']);
+
+// 13. STATE_CAP: (일자, 시장, 상태) 버킷 선착순
+const surge3 = [S({ mstate: 'SURGE', sentAt: 30, name: 'late' }), S({ mstate: 'SURGE', sentAt: 10, name: 'early' }), S({ mstate: 'SURGE', sentAt: 20, name: 'mid' })];
+assert.deepStrictEqual(shadowStateSelect(surge3, 'STATE_CAP').map((r) => r.name), ['early']); // SURGE 상한 1, sentAt 최소
+const up4 = [1, 2, 3, 4].map((i) => S({ mkt: 'KOSPI', mstate: 'UP', sentAt: i, name: 'u' + i }));
+assert.deepStrictEqual(shadowStateSelect(up4, 'STATE_CAP').map((r) => r.name), ['u1', 'u2', 'u3']); // UP 상한 3
+assert.deepStrictEqual(shadowStateSelect([S({ mstate: 'CRASH' }), S({ mstate: 'CRASH' })], 'STATE_CAP'), []); // CRASH 0
+assert.strictEqual(shadowStateSelect([1, 2, 3, 4, 5].map((i) => S({ mstate: 'UNKNOWN', sentAt: i })), 'STATE_CAP').length, 5); // UNKNOWN 상한 없음
+const noSent = [S({ mstate: 'SURGE', sentAt: undefined, name: 'a' }), S({ mstate: 'SURGE', sentAt: undefined, name: 'b' })];
+assert.deepStrictEqual(shadowStateSelect(noSent, 'STATE_CAP').map((r) => r.name), ['a']); // sentAt 없으면 입력 순서
+const twoMk = [S({ mkt: 'KOSPI', mstate: 'SURGE', name: 'k1' }), S({ mkt: 'KOSDAQ', mstate: 'SURGE', name: 'q1' }),
+  S({ mkt: 'KOSDAQ', mstate: 'SURGE', date: '2026-10-02', name: 'q2' })];
+assert.deepStrictEqual(shadowStateSelect(twoMk, 'STATE_CAP').map((r) => r.name), ['k1', 'q1', 'q2']); // 시장·일자별 독립
+
+// 14. STATE_CAP_BEST: 같은 버킷에서 D>C>B>A, 점수 — 선착순과 달라지는 입력
+const bestIn = [S({ mstate: 'SURGE', sentAt: 1, patternType: 'A눌림목', score: 300, name: 'A' }), S({ mstate: 'SURGE', sentAt: 2, patternType: 'D박스', score: 50, name: 'D' })];
+assert.deepStrictEqual(shadowStateSelect(bestIn, 'STATE_CAP').map((r) => r.name), ['A']);
+assert.deepStrictEqual(shadowStateSelect(bestIn, 'STATE_CAP_BEST').map((r) => r.name), ['D']);
+
+// 15. STATE_ALL = BLOCK → PAT → CAP
+const allIn = [S({ mstate: 'SURGE', name: 's' }), S({ mstate: 'CRASH', patternType: 'D박스', name: 'c' }),
+  S({ mstate: 'DOWN', patternType: 'A눌림목', name: 'da' }), S({ mstate: 'DOWN', patternType: 'B지지선', sentAt: 1, name: 'db1' }),
+  S({ mstate: 'DOWN', patternType: 'B지지선', sentAt: 2, name: 'db2' })].concat([1, 2, 3, 4].map((i) => S({ mstate: 'UP', sentAt: i, name: 'u' + i })));
+assert.deepStrictEqual(shadowStateSelect(allIn, 'STATE_ALL').map((r) => r.name), ['db1', 'u1', 'u2', 'u3']);
+
+// 16. look-ahead 방지: holding도 슬롯 점유, 통계에서만 제외
+const hold = [S({ mstate: 'SURGE', sentAt: 1, result: 'holding' }), S({ mstate: 'SURGE', sentAt: 2, result: 'win' })];
+const hsel = shadowStateSelect(hold, 'STATE_CAP');
+assert.strictEqual(hsel.length, 1);
+assert.strictEqual(hsel[0].result, 'holding');
+assert.strictEqual(shadowStats(hsel, 'x').closed, 0);
+
+// 17. 입력 변형 없음
+const snap2 = JSON.parse(JSON.stringify(allIn));
+shadowStateSelect(allIn, 'STATE_ALL');
+assert.deepStrictEqual(JSON.parse(JSON.stringify(allIn)), snap2);
+
+// 18. computeShadowStateCohorts: mstate 비문자열·carryOver 제외, 제외분 집계
+const dets = [S({ mstate: 'SURGE', result: 'loss', stopPct: -0.04 }), S({ mstate: 'SURGE', result: 'loss', stopPct: -0.04 }),
+  S({ mstate: 'UP', result: 'win', targetPct: 0.10 }), S({ mstate: 'FLAT', result: 'partial_win', stopPct: 0.02 }),
+  S({ mstate: null, result: 'loss' }), S({ mstate: undefined, result: 'loss' }),
+  S({ mstate: 'UP', result: 'win', carryOver: true }), S({ mstate: 'UP', result: 'holding' })];
+const sc = computeShadowStateCohorts(dets);
+assert.strictEqual(sc.ALLS.n, 5);
+assert.strictEqual(sc.ALLS.closed, 4);
+assert.strictEqual(sc.STATE_BLOCK.n, 3);
+assert.strictEqual(sc.STATE_BLOCK.closed, 2);
+assert.strictEqual(sc.STATE_BLOCK.sumRet, 12);        // (10% + 2%) %p
+assert.strictEqual(sc.STATE_BLOCK.excludedClosed, 2);
+assert.strictEqual(sc.STATE_BLOCK.excludedSum, -8);
+for (const name of SHADOW_STATE_COHORTS) assert.strictEqual(sc[name].closed + sc[name].excludedClosed, sc.ALLS.closed, name);
+assert.strictEqual(computeShadowStateCohorts([]).ALLS.n, 0);
+assert.strictEqual(computeShadowStateCohorts([]).STATE_ALL.closed, 0);
+assert.strictEqual(computeShadowStateCohorts(undefined).ALLS.n, 0);
+
+// 19. shadowStateGate: 정보주 판정·제외분 평균·ALLS 없는 주 건너뜀·빈 입력
+const sw = (allN, allClosed, allWin, allAvg, cN, cClosed, cWin, cAvg, exClosed, exSum) => ({
+  ALLS: { n: allN, closed: allClosed, win: allWin, winPct: allClosed ? 100 * allWin / allClosed : 0, avgRet: allAvg },
+  STATE_BLOCK: { n: cN, closed: cClosed, win: cWin, winPct: cClosed ? 100 * cWin / cClosed : 0, avgRet: cAvg, excludedClosed: exClosed, excludedSum: exSum },
+});
+assert.strictEqual(shadowStateGate({ w1: sw(40, 40, 8, -1, 35, 35, 8, -0.8, 5, -6) }).STATE_BLOCK.informativeWeeks, 0); // 제외 5 < ceil(40*.15)=6
+assert.strictEqual(shadowStateGate({ w1: sw(40, 40, 8, -1, 34, 34, 8, -0.8, 6, -7) }).STATE_BLOCK.informativeWeeks, 1); // 제외 6 >= 6
+assert.strictEqual(shadowStateGate({ w1: sw(20, 20, 4, -1, 15, 15, 4, -0.8, 5, -6) }).STATE_BLOCK.informativeWeeks, 1); // 하한 5
+assert.strictEqual(shadowStateGate({ old: { ALL: { n: 9 }, NOCOMP: { n: 5 } } }).STATE_BLOCK.informativeWeeks, 0);      // ALLS 없는 과거 주
+const gz = shadowStateGate(undefined);
+for (const name of SHADOW_STATE_GATE_COHORTS) {
+  assert.strictEqual(gz[name].closedTotal, 0);
+  assert.strictEqual(gz[name].passN, false);
+  assert.strictEqual(gz[name].passWeeks, false);
+  assert.strictEqual(gz[name].passEffect, false);
+}
+const goodW = () => sw(60, 60, 6, -1.5, 40, 12, 3, 0.5, 20, -20);   // 승률 10%→25%, 평균 -1.5→+0.5, 제외분 평균 -1%p
+const g4 = shadowStateGate({ a: goodW(), b: goodW(), c: goodW() }).STATE_BLOCK;
+assert.strictEqual(g4.informativeWeeks, 3);
+assert.strictEqual(g4.weeksPositive, 3);
+assert.strictEqual(g4.closedTotal, 36);
+assert.strictEqual(g4.passN, true);
+assert.strictEqual(g4.passWeeks, true);
+assert.strictEqual(g4.passEffect, true);
+const badEx = () => sw(60, 60, 6, -1.5, 40, 12, 3, 0.5, 20, 10);    // 제외분 평균이 +이면 좋은 종목을 걷어낸 것
+assert.strictEqual(shadowStateGate({ a: badEx(), b: badEx(), c: badEx() }).STATE_BLOCK.passEffect, false);
+assert.strictEqual(shadowStateGate({ a: goodW(), b: goodW() }).STATE_BLOCK.passWeeks, false); // 정보주 2 < 3
+
+// 20. shadowStateSummary: 일자·시장별 최빈 상태, mstate 없는 추천 무시
+const sm = shadowStateSummary([S({ date: '2026-10-06', mstate: 'SURGE' }), S({ date: '2026-10-06', mstate: 'SURGE' }),
+  S({ date: '2026-10-06', mstate: 'UNKNOWN' }), S({ date: '2026-10-12', mstate: 'CRASH' }), S({ date: '2026-10-12', mstate: null }),
+  S({ date: '2026-10-06', mkt: 'KOSPI', mstate: 'UP' })]);
+assert.deepStrictEqual(sm.KOSDAQ, [{ date: '2026-10-06', state: 'SURGE', n: 3 }, { date: '2026-10-12', state: 'CRASH', n: 1 }]);
+assert.deepStrictEqual(sm.KOSPI, [{ date: '2026-10-06', state: 'UP', n: 1 }]);
+
+// 21. shadowFormatStateSection: 빈 데이터·표본 적음·줄 수
+const noRec = shadowFormatStateSection(computeShadowStateCohorts([]), shadowStateGate({}), shadowStateSummary([]));
+assert.ok(noRec.includes('상태 기록 없음'));
+const fmtOut = shadowFormatStateSection(sc, shadowStateGate({ w: sc }), shadowStateSummary(dets));
+assert.ok(fmtOut.includes('🌡️ 시장상태 Shadow'));
+assert.ok(fmtOut.includes('※표본 적음'));            // closed < 5
+assert.ok(fmtOut.split('\n').filter(Boolean).length <= 12);
+assert.ok(shadowFormatStateSection(computeShadowStateCohorts([S({ result: 'holding' })]), shadowStateGate({}), shadowStateSummary([])).includes('데이터 없음'));
+
+// 22. 회귀: 기존 코호트 키 집합은 변하지 않는다
+assert.deepStrictEqual(Object.keys(computeShadowCohorts([rec({})])).sort(), ['ALL', 'CAP2', 'NOCOMP', 'NOCOMP+CAP2', 'RVOL5']);
 
 // 설정 상수 sanity
 assert.strictEqual(SHADOW_CFG.dayCap, 2);
