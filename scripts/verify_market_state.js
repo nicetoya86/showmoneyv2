@@ -6,7 +6,7 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { MS_CFG, msClassify, msFetchIndexBars } = require('../lib/marketState');
+const { MS_CFG, msClassify, msFetchIndexBars, msLoadStates } = require('../lib/marketState');
 
 // 합성 봉: closes 배열(오래된→최신), 마지막 봉 날짜 endD('yyyyMMdd'), 하루씩 거슬러 올라가는 달력일(주말 무시 — 합성용)
 const ymd = (dt) => dt.toISOString().slice(0, 10).replace(/-/g, '');
@@ -73,6 +73,35 @@ assert.strictEqual(real('KOSDAQ', '2026-10-13', '20261012'), 'CRASH');
   assert.strictEqual(viaYahoo.length, 2);
   assert.strictEqual(viaYahoo[1].c, 7003.74);
 
+  // 11. msLoadStates — 하루 1회 캐시, UNKNOWN은 캐시하지 않고 재시도, 예외 전파 없음
+  const naverFmt = (bars) => bars.map((b) => ({ localDate: b.d, closePrice: String(b.c) }));
+  const mkHttp = (rows) => { const h = async () => { h.calls++; return rows; }; h.calls = 0; return h; };
+  const good = mkHttp(naverFmt(mk(flat(80, 100), PREV)));
+  const store = {};
+  const ok1 = await msLoadStates(good, store, TODAY, PREV);
+  assert.strictEqual(ok1.KOSPI.state, 'FLAT');
+  assert.strictEqual(ok1.KOSDAQ.state, 'FLAT');
+  assert.strictEqual(store.marketStateCache.date, TODAY);
+  const callsAfterFirst = good.calls;
+  const ok2 = await msLoadStates(good, store, TODAY, PREV);          // 같은 날 재호출 → 캐시 히트
+  assert.strictEqual(good.calls, callsAfterFirst);
+  assert.strictEqual(ok2.KOSDAQ.state, 'FLAT');
+  const tomorrow = await msLoadStates(good, store, '2026-10-08', '20261007'); // 날짜가 바뀌면 캐시 무효 → 재조회(봉이 오래돼 UNKNOWN)
+  assert.ok(good.calls > callsAfterFirst);
+  assert.strictEqual(tomorrow.KOSPI.state, 'UNKNOWN');
+  const stale = mkHttp(naverFmt(mk(flat(80, 100), '20261002')));      // 마지막 봉이 expectedPrev가 아님
+  const st2 = {};
+  assert.strictEqual((await msLoadStates(stale, st2, TODAY, PREV)).KOSPI.state, 'UNKNOWN');
+  const c1 = stale.calls;
+  await msLoadStates(stale, st2, TODAY, PREV);
+  assert.ok(stale.calls > c1, 'UNKNOWN은 캐시하지 않고 다음 호출에서 재시도');
+  const boom = async () => { throw new Error('network down'); };
+  const rb = await msLoadStates(boom, {}, TODAY, PREV);               // 예외 전파 없음
+  assert.strictEqual(rb.KOSPI.state, 'UNKNOWN');
+  assert.strictEqual(rb.KOSDAQ.state, 'UNKNOWN');
+  const noStore = await msLoadStates(good, undefined, TODAY, PREV);   // store 없어도 동작
+  assert.strictEqual(noStore.KOSPI.state, 'FLAT');
+
   if (process.argv.includes('--sensitivity')) {
     // 경계값 ±1%p 민감도 — 표만 출력(판정은 사람). 대상: 픽스처 지수, 마지막 봉 직전까지 매일.
     const variants = { base: MS_CFG };
@@ -92,5 +121,10 @@ assert.strictEqual(real('KOSDAQ', '2026-10-13', '20261012'), 'CRASH');
       }
     }
   }
+  // 12. 소스 배선: 스캐너가 상태 필드 4개를 기록하고 조회는 try/catch 안에 있다(발송 경로 보호)
+  const scanner = fs.readFileSync(path.join(__dirname, '../src/swing-scanner.src.js'), 'utf8');
+  assert.ok(/require\('\.\.\/lib\/marketState'\)/.test(scanner), 'scanner lib require');
+  assert.ok(/try \{ msStates = await msLoadStates\(http, store, today, getPrevTradingDay\(today\)\); \} catch/.test(scanner), 'scanner try/catch');
+  for (const f of ['mkt:', 'mstate:', 'mstateAsOf:', 'sentAt: Date.now()']) assert.ok(scanner.includes(f), 'scanner field ' + f);
   console.log('verify_market_state: ALL PASS');
 })().catch((e) => { console.error(e); process.exit(1); });

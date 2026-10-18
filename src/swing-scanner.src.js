@@ -2,6 +2,7 @@ const { HOLIDAYS } = require('../lib/holidays');
 const { to0, sleep } = require('../lib/format');
 const { createTelegram } = require('../lib/telegramClient');
 const { createTossClient } = require('../lib/tossClient');
+const { msLoadStates } = require('../lib/marketState');
 const run = async function () {
   const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
   const CHAT = '523002062';
@@ -1486,6 +1487,13 @@ const run = async function () {
   // ===== /선정 필터 =====
   // MIN_DAILY_PICKS=0: 0건이면 알림 없이 정상 종료
 
+  // [SHADOW-2026-10-19] 시장상태 기록(market-state-shadow) — 발송 불변. 라이브 레짐(getMarketRegime)과 별개의
+  // 자체 지수 조회를 하루 1회 캐시로 쓰며, 실패하면 mstate=null로 기록하고 발송은 그대로 진행한다.
+  let msStates = { KOSPI: null, KOSDAQ: null };
+  if (selected.length > 0) {
+    try { msStates = await msLoadStates(http, store, today, getPrevTradingDay(today)); } catch (e) { /* shadow 실패는 무시 */ }
+  }
+
   const sent = [];
   let sendFailCount = 0;
   const sendFailSamples = [];
@@ -1842,6 +1850,11 @@ const run = async function () {
         // [SHADOW-2026-10-03] signals는 slice(0,3)라 복합 신호가 붙으면 거래량 태그가 잘린다 —
         // 실제 rvol을 따로 기록해야 거래량 기준 분석이 오염되지 않는다(발송 로직엔 영향 없음).
         rvol: Number.isFinite(selected[i].rvolVal) ? +selected[i].rvolVal.toFixed(2) : null,
+        // [SHADOW-2026-10-19] market-state-shadow: 소속 시장의 직전 종가 기준 상태 + 선착순 재현용 발송 시각(발송 로직 무관)
+        mkt: selected[i].market,
+        mstate: (msStates[selected[i].market] && msStates[selected[i].market].state) || null,
+        mstateAsOf: (msStates[selected[i].market] && msStates[selected[i].market].asOfBar) || null,
+        sentAt: Date.now(),
       });
 
       sent.push(selected[i].ticker);
