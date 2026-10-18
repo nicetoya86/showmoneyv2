@@ -234,6 +234,23 @@ assert.ok(shadowFormatStateSection(computeShadowStateCohorts([S({ result: 'holdi
 // 22. 회귀: 기존 코호트 키 집합은 변하지 않는다
 assert.deepStrictEqual(Object.keys(computeShadowCohorts([rec({})])).sort(), ['ALL', 'CAP2', 'NOCOMP', 'NOCOMP+CAP2', 'RVOL5']);
 
+// 23. 리포터 배선(market-state-shadow): 새 섹션이 기존 Shadow 블록 뒤, try/catch 안에서, 기존 shadowStats 객체에 병합
+assert.ok(/shadowStateGate/.test(reporter) && /shadowFormatStateSection/.test(reporter) && /computeShadowStateCohorts/.test(reporter), 'reporter state imports');
+assert.ok(/try \{\s*const ss = computeShadowStateCohorts\(details\);[\s\S]*?\} catch \(e\) \{\s*logger\.warning\('market state shadow failed'/.test(reporter), 'reporter state try/catch');
+assert.ok(reporter.indexOf("logger.warning('shadow cohorts failed'") < reporter.indexOf("logger.warning('market state shadow failed'"), 'state section after existing shadow');
+assert.ok(reporter.indexOf("logger.warning('market state shadow failed'") < reporter.indexOf('본 리포트는 참고용이며'), 'state section before disclaimer');
+
+// 24. 번들 산출물: lib require가 전부 인라인돼야 한다(번들러는 한 줄짜리 `const { ... } = require('../lib/x');`만 인라인 —
+//     다중 줄 require는 조용히 남아 n8n에서 런타임 오류가 난다).
+for (const f of ['swing_scanner_code.js', 'weekly_reporter_code.js']) {
+  const b = fs.readFileSync(path.join(__dirname, '..', f), 'utf-8');
+  assert.ok(!/require\(['"]\.\.\/lib\//.test(b), f + ': lib require가 인라인되지 않았음');
+}
+for (const f of ['src/swing-scanner.src.js', 'src/weekly-reporter.src.js']) {
+  const lines = fs.readFileSync(path.join(__dirname, '..', f), 'utf-8').split(String.fromCharCode(10));
+  lines.forEach((l, i) => { if (/require\(['"]\.\.\/lib\//.test(l)) assert.ok(/^const\s*\{[^}]+\}\s*=\s*require\(/.test(l), f + ':' + (i + 1) + ' lib require는 한 줄이어야 번들러가 인라인함'); });
+}
+
 // 설정 상수 sanity
 assert.strictEqual(SHADOW_CFG.dayCap, 2);
 assert.strictEqual(SHADOW_CFG.rvolMin, 5);

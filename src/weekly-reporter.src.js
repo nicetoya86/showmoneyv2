@@ -3,7 +3,8 @@ const { pct, sleep } = require('../lib/format');
 const { createTelegram } = require('../lib/telegramClient');
 const { createNaverClient } = require('../lib/naverClient');
 const { getAtr, calcTrailingStop, TRAIL_BE_GAIN, replayIntradayStopFromBars } = require('../lib/trailingStop');
-const { computeShadowCohorts, shadowGate } = require('../lib/shadowCohorts');
+// (번들러는 한 줄짜리 require만 인라인한다 — 다중 줄로 쪼개지 말 것)
+const { computeShadowCohorts, shadowGate, computeShadowStateCohorts, shadowStateGate, shadowStateSummary, shadowFormatStateSection } = require('../lib/shadowCohorts');
 
 const run = async function () {
   const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
@@ -632,6 +633,18 @@ const run = async function () {
       gate.NOCOMP.weeksPositive + '/' + gate.NOCOMP.weeks + NL;
   } catch (e) {
     logger.warning('shadow cohorts failed', { error: e && e.message }, requestId);
+  }
+
+  // [SHADOW-2026-10-19] 시장상태 shadow(market-state-shadow) — 발송 불변. 위 Shadow 블록과 독립된 try/catch라 한쪽이 실패해도
+  // 다른 쪽·기존 리포트에는 영향이 없다. 통계는 같은 주 객체(store.shadowStats[weekStart])에 병합 저장한다.
+  try {
+    const ss = computeShadowStateCohorts(details);
+    if (!store.shadowStats) store.shadowStats = {};
+    store.shadowStats[weekDates[0]] = Object.assign(store.shadowStats[weekDates[0]] || {}, ss);
+    const sg = shadowStateGate(store.shadowStats);
+    msg += NL + shadowFormatStateSection(ss, sg, shadowStateSummary(details.filter((d) => !d.carryOver))) + NL;
+  } catch (e) {
+    logger.warning('market state shadow failed', { error: e && e.message }, requestId);
   }
 
   msg += NL + '⚠️ 본 리포트는 참고용이며 투자 결과에 책임지지 않습니다.';
