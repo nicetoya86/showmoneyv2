@@ -102,6 +102,23 @@ assert.strictEqual(real('KOSDAQ', '2026-10-13', '20261012'), 'CRASH');
   const noStore = await msLoadStates(good, undefined, TODAY, PREV);   // store 없어도 동작
   assert.strictEqual(noStore.KOSPI.state, 'FLAT');
 
+  // 11b. 발송 경로 보호(리뷰 지적): 두 시장 조회는 동시에, 응답이 없어도 timeoutMs 안에 반환
+  const slow = async () => { slow.calls++; await new Promise((r) => setTimeout(r, 120)); return naverFmt(mk(flat(80, 100), PREV)); };
+  slow.calls = 0;
+  const t0 = Date.now();
+  const rs = await msLoadStates(slow, {}, TODAY, PREV);
+  assert.strictEqual(rs.KOSPI.state, 'FLAT');
+  assert.ok(Date.now() - t0 < 220, `두 시장 조회는 병렬이어야 함 (elapsed ${Date.now() - t0}ms)`);
+  const hang = () => new Promise(() => {});                          // 영원히 응답 없음
+  const t1 = Date.now();
+  const rh = await msLoadStates(hang, {}, TODAY, PREV, { timeoutMs: 60 });
+  assert.ok(Date.now() - t1 < 500, `timeoutMs 내 반환 (elapsed ${Date.now() - t1}ms)`);
+  assert.strictEqual(rh.KOSPI.state, 'UNKNOWN');
+  assert.strictEqual(rh.KOSDAQ.state, 'UNKNOWN');
+  let seenTimeout = null;
+  await msFetchIndexBars(async (o) => { seenTimeout = o.timeout; return []; }, 'KOSPI', TODAY);
+  assert.ok(seenTimeout > 0 && seenTimeout <= 10000, 'http 호출에 짧은 개별 timeout을 건다(스캐너 기본 45s 덮어쓰기)');
+
   if (process.argv.includes('--sensitivity')) {
     // 경계값 ±1%p 민감도 — 표만 출력(판정은 사람). 대상: 픽스처 지수, 마지막 봉 직전까지 매일.
     const variants = { base: MS_CFG };
