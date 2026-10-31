@@ -4,8 +4,8 @@ const { createTelegram } = require('../lib/telegramClient');
 const { createTossClient } = require('../lib/tossClient');
 const { msLoadStates } = require('../lib/marketState');
 const run = async function () {
-  const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
-  const CHAT = '523002062';
+  const BOT = SECRETS.BOT;
+  const CHAT = SECRETS.CHAT;
   const MIN_INTRADAY_TURNOVER = 3000000000; // 30억 KRW
   const MIN_PRICE = 1000;                   // 최소 주가 (프레임워크 — KRX API 필터)
   const ETF_EXCLUDE_KEYWORDS = [            // ETF/펀드/리츠 제외 키워드 (2026-07-01)
@@ -13,7 +13,7 @@ const run = async function () {
     '리츠','펀드',
   ];
   const DUPLICATE_WINDOW_MINUTES = 480;
-  const DART_API_KEY = '34a9b090d2a7b1ee689a240fef68667d36b389e7';
+  const DART_API_KEY = SECRETS.DART;
   const ALERT_START_HOUR   = 9;
   const ALERT_START_MINUTE = 0;
   const STOP_NEW_ALERTS_HOUR = 13;    // 전체 종료 (A/B/D 패턴)

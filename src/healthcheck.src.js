@@ -2,8 +2,8 @@ const { isHoliday } = require('../lib/holidays');
 const { createTelegram } = require('../lib/telegramClient');
 
 const run = async function () {
-  const BOT = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
-  const CHAT = '523002062';
+  const BOT = SECRETS.BOT;
+  const CHAT = SECRETS.CHAT;
   const http = async (o) => await this.helpers.httpRequest(Object.assign({ timeout: 30000 }, o));
   const telegram = createTelegram(http, BOT, CHAT);
 

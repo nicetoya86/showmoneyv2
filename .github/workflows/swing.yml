@@ -1,0 +1,47 @@
+name: swing
+# 섀도 단계: 모든 잡 DRY_RUN=1 (텔레그램 미발송, 상태 미커밋). 전환 시 DRY 기본값을 '0'으로 바꾼다.
+on:
+  workflow_dispatch:
+    inputs:
+      job: { description: 'scanner|weekly|risk|theme|healthcheck|monitor', required: true }
+      dry_run: { description: 'dry run (1/0)', default: '1' }
+  schedule:
+    - cron: '*/10 0-2 * * 1-5'   # scanner  09:00-11:50 KST
+    - cron: '0 0 * * 1-5'        # healthcheck
+    - cron: '30 23 * * 0-4'      # risk 08:30 KST
+    - cron: '45 23 * * 0-4'      # theme 08:45 KST
+    - cron: '0 1,2 * * 1-5'      # monitor
+    - cron: '30 3 * * 1-5'       # monitor
+    - cron: '30 4 * * 1-5'       # monitor
+    - cron: '30 5 * * 1-5'       # monitor
+    - cron: '0 7 * * 1-5'        # monitor
+    - cron: '0 0 * * 6'          # weekly 09:00 KST Sat
+permissions: {}
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BOT: ${{ secrets.BOT }}
+      CHAT: ${{ secrets.CHAT }}
+      DART: ${{ secrets.DART }}
+      STATE_PAT: ${{ secrets.STATE_PAT }}
+      DRY_RUN: ${{ github.event.inputs.dry_run || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: pick job from cron
+        id: pick
+        env: { CRON: '${{ github.event.schedule }}', INPUT: '${{ github.event.inputs.job }}' }
+        run: |
+          case "${INPUT:-$CRON}" in
+            scanner|'*/10 0-2 * * 1-5') j=scanner;;
+            weekly|'0 0 * * 6') j=weekly;;
+            risk|'30 23 * * 0-4') j=risk;;
+            theme|'45 23 * * 0-4') j=theme;;
+            healthcheck|'0 0 * * 1-5') j=healthcheck;;
+            *) j=monitor;;
+          esac
+          echo "job=$j" >> "$GITHUB_OUTPUT"
+      - run: node runner/run.js ${{ steps.pick.outputs.job }}

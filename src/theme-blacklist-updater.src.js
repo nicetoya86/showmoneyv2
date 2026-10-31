@@ -140,8 +140,8 @@ if (errors.length) detailErrors.push(...errors);
 // 4) 저장 + 텔레그램 알림 + 리턴 (라이브 노드의 FIX C-4 / FIX W-6 패턴 그대로 유지)
 const themeCodes = [...codeSet].sort();
 const prevThemeCodes = Array.isArray(store.blacklist.themeCodes) ? store.blacklist.themeCodes : [];
-const BOT_T = '8366696724:AAHROcjGoQEn9BziD-sYdAu3ZuaolwtkgLE';
-const CHAT_T = '523002062';
+const BOT_T = SECRETS.BOT;
+const CHAT_T = SECRETS.CHAT;
 const NL_T = String.fromCharCode(10);
 const telegram = createTelegram(http, BOT_T, CHAT_T);
 

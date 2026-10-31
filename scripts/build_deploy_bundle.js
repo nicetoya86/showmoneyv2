@@ -136,6 +136,7 @@ function smokeTest(code, label) {
   Object.defineProperties(sandbox, Object.getOwnPropertyDescriptors(global));
   Object.assign(sandbox, {
     items: [],
+    SECRETS: { BOT: 'x:x', CHAT: '1', DART: 'x' },
     helpers: {
       httpRequest: async (opts) => (opts && opts.json === false ? '' : []),
     },
@@ -165,6 +166,8 @@ function smokeTest(code, label) {
   });
 }
 
+const N8N_MODE = process.argv.includes('--n8n');
+
 async function main() {
   console.log('1) lib 파일 간 이름 충돌 검사...');
   checkLibNameCollisions();
@@ -174,7 +177,9 @@ async function main() {
   for (const { src, out } of MANIFEST) {
     console.log(`2) 빌드: src/${src} -> ${out}`);
     const generated = buildOne(src);
-    const outPath = path.join(ROOT, out);
+    // 기본: Actions 러너용 runner/bundles/ (시크릿 없음, SECRETS 주입). --n8n: 동결된 루트 *_code.js 덮어쓰기(레거시)
+    const outPath = N8N_MODE ? path.join(ROOT, out) : path.join(ROOT, 'runner', 'bundles', path.basename(src, '.src.js') + '.js');
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
 
     console.log(`   문법 검증...`);
     assertValidSyntax(generated, out.replace(/[^a-zA-Z0-9._-]/g, '_'));
