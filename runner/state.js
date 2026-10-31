@@ -5,7 +5,7 @@ const FILE = 'state.json';
 const API = `https://api.github.com/repos/${REPO}/contents/${FILE}`;
 
 const hdr = () => ({
-  Authorization: `Bearer ${process.env.STATE_PAT}`,
+  Authorization: `Bearer ${(process.env.STATE_PAT || "").replace(/[^!-~]/g, "")}`,
   Accept: 'application/vnd.github+json',
   'X-GitHub-Api-Version': '2022-11-28',
   'User-Agent': 'showmoneyv2-runner',
